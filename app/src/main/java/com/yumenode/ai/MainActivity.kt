@@ -2182,183 +2182,194 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         }
         if (drawPage?.onActivityResult(requestCode, resultCode, data) == true) return
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_PICK_MODEL && resultCode == RESULT_OK) {
-            data?.data?.let { copyModelToPrivate(it) }
-        }
-        if (requestCode == REQ_PICK_MMPROJ && resultCode == RESULT_OK) {
-            data?.data?.let { visionManager?.copyMmprojToPrivate(it) }
-        }
-        if (requestCode == AttachmentHandler.REQ_PICK_CHAT_IMAGE && resultCode == RESULT_OK) {
-            val uris = ArrayList<Uri>()
-            val clip = data?.clipData
-            if (clip != null) {
-                for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { uris.add(it) }
-            } else {
-                data?.data?.let { uris.add(it) }
-            }
-            if (uris.isEmpty()) return
-            scope.launch {
-                var added = 0
-                for (u in uris) {
-                    if (attachmentHandler.getPendingImages().size >= AttachmentHandler.MAX_ATTACH) { toast(getString(R.string.s_279)); break }
-                    val bmp = withContext(Dispatchers.IO) { attachmentHandler.decodeChatImage(u) } ?: continue
-                    val jpeg = withContext(Dispatchers.IO) { bitmapToJpeg(bmp) }
-                    attachmentHandler.addPendingImage(bmp, jpeg)
-                    added++
-                }
-                if (added == 0 && attachmentHandler.getPendingImages().isEmpty()) toast(getString(R.string.s_275))
-            }
-        }
+
+        // La camara se atiende siempre: hay que soltar pendingCameraUri aunque se cancele.
         if (requestCode == REQ_TAKE_PHOTO) {
-            val uri = pendingCameraUri
-            pendingCameraUri = null
-            if (resultCode != RESULT_OK || uri == null) return
-            scope.launch {
-                val bmp = withContext(Dispatchers.IO) { attachmentHandler.decodeChatImage(uri) }
-                if (bmp == null) { toast(getString(R.string.s_275)); return@launch }
-                val jpeg = withContext(Dispatchers.IO) { bitmapToJpeg(bmp) }
-                attachmentHandler.addPendingImage(bmp, jpeg)
+            handleTakePhotoResult(resultCode)
+            return
+        }
+        if (resultCode != RESULT_OK) return
+        when (requestCode) {
+            REQ_PICK_MODEL -> data?.data?.let { copyModelToPrivate(it) }
+            REQ_PICK_MMPROJ -> data?.data?.let { visionManager?.copyMmprojToPrivate(it) }
+            AttachmentHandler.REQ_PICK_CHAT_IMAGE -> handlePickedChatImages(data)
+            AttachmentHandler.REQ_PICK_FILE -> handlePickedFiles(data)
+            REQ_PICK_DRAW_MODEL -> handlePickedDrawModel(data)
+            REQ_PICK_LORA -> handlePickedLora(data)
+            REQ_TAGGER_ONNX -> handlePickedTaggerOnnx(data)
+            REQ_TAGGER_CSV -> handlePickedTaggerCsv(data)
+        }
+    }
+
+    /** URIs de un resultado, venga como seleccion multiple o simple. */
+    private fun resultUris(data: Intent?): List<Uri> {
+        val clip = data?.clipData
+        if (clip != null) {
+            val out = ArrayList<Uri>(clip.itemCount)
+            for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { out.add(it) }
+            return out
+        }
+        return listOfNotNull(data?.data)
+    }
+
+    private fun handlePickedChatImages(data: Intent?) {
+        val uris = resultUris(data)
+        if (uris.isEmpty()) return
+        scope.launch {
+            val added = attachmentHandler.importPickedImages(uris) { bitmapToJpeg(it) }
+            if (added == 0 && attachmentHandler.getPendingImages().isEmpty()) {
+                toast(getString(R.string.s_275))
             }
         }
-        if (requestCode == AttachmentHandler.REQ_PICK_FILE && resultCode == RESULT_OK) {
-            val uris = ArrayList<Uri>()
-            data?.clipData?.let { clip ->
-                for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { uris.add(it) }
+    }
+
+    private fun handleTakePhotoResult(resultCode: Int) {
+        val uri = pendingCameraUri
+        pendingCameraUri = null
+        if (resultCode != RESULT_OK || uri == null) return
+        scope.launch {
+            val bmp = withContext(Dispatchers.IO) { attachmentHandler.decodeChatImage(uri) }
+            if (bmp == null) {
+                toast(getString(R.string.s_275))
+                return@launch
             }
-            if (uris.isEmpty()) data?.data?.let { uris.add(it) }
-            if (uris.isEmpty()) return
-            scope.launch {
-                var err: String? = null
-                for (u in uris) {
-                    if (attachmentHandler.getPendingFiles().size >= AttachmentHandler.MAX_FILES) { toast(getString(R.string.s_297)); break }
-                    val r = withContext(Dispatchers.IO) { attachmentHandler.readTextFile(u) }
-                    val f = r.file
-                    if (f == null) {
-                        if (err == null) err = r.error
-                        continue
-                    }
-                    attachmentHandler.addPendingFile(f)
-                }
-                if (err != null) toast(err)
-            }
+            val jpeg = withContext(Dispatchers.IO) { bitmapToJpeg(bmp) }
+            attachmentHandler.addPendingImage(bmp, jpeg)
         }
-        if (requestCode == REQ_PICK_DRAW_MODEL && resultCode == RESULT_OK) {
-            val uri = data?.data ?: return
-            val dpg = drawPage ?: return
-            val slot = pendingSlotKey
-            pendingSlotKey = null
-            setBusy(true)
-            setDrawBusy(true)
-            showDrawProgress(true)
-            setStatus(getString(R.string.s_131), C_WARN)
-            scope.launch {
-                val err = dpg.importSetFile(
-                    uri,
-                    slot,
-                    onStage = { stage -> drawModelStatus?.text = stage },
-                    onProgress = { done, total -> updateDrawProgress(done, total) }
-                )
-                setBusy(false)
-                setDrawBusy(false)
-                showDrawProgress(false)
-                if (err == null) {
-                    drawSetId = dpg.activeSetId()
-                    val set = dpg.activeSetOrSelected()
-                    drawModelStatus?.text = dpg.modelSummary()
-                    setStatus(getString(R.string.s_161), C_OK)
-                    if (set != null && set.kind == "multi" && slot == null) {
-                        toast(getString(R.string.s_370))
-                        // 新导入的多文件主模型：自动把槽位面板展开，方便接着补配套文件
-                        drawSlotsExpanded = true
-                    } else {
-                        toast(getString(R.string.s_091))
-                    }
+    }
+
+    private fun handlePickedFiles(data: Intent?) {
+        val uris = resultUris(data)
+        if (uris.isEmpty()) return
+        scope.launch {
+            val err = attachmentHandler.importPickedFiles(uris)
+            if (err != null) toast(err)
+        }
+    }
+
+    private fun handlePickedDrawModel(data: Intent?) {
+        val uri = data?.data ?: return
+        val dpg = drawPage ?: return
+        val slot = pendingSlotKey
+        pendingSlotKey = null
+        setBusy(true)
+        setDrawBusy(true)
+        showDrawProgress(true)
+        setStatus(getString(R.string.s_131), C_WARN)
+        scope.launch {
+            val err = dpg.importSetFile(
+                uri,
+                slot,
+                onStage = { stage -> drawModelStatus?.text = stage },
+                onProgress = { done, total -> updateDrawProgress(done, total) }
+            )
+            setBusy(false)
+            setDrawBusy(false)
+            showDrawProgress(false)
+            if (err == null) {
+                drawSetId = dpg.activeSetId()
+                val set = dpg.activeSetOrSelected()
+                drawModelStatus?.text = dpg.modelSummary()
+                setStatus(getString(R.string.s_161), C_OK)
+                if (set != null && set.kind == "multi" && slot == null) {
+                    toast(getString(R.string.s_370))
+                    // 新导入的多文件主模型：自动把槽位面板展开，方便接着补配套文件
+                    drawSlotsExpanded = true
                 } else {
-                    drawModelStatus?.text = err
-                    setStatus(getString(R.string.s_158), C_ERR)
-                    toast(err)
+                    toast(getString(R.string.s_091))
                 }
-                refreshDrawModels()
+            } else {
+                drawModelStatus?.text = err
+                setStatus(getString(R.string.s_158), C_ERR)
+                toast(err)
             }
+            refreshDrawModels()
         }
-        if (requestCode == REQ_PICK_LORA && resultCode == RESULT_OK) {
-            val uri = data?.data ?: return
-            val dpg = drawPage ?: return
-            setBusy(true)
-            setDrawBusy(true)
-            showDrawProgress(true)
-            setStatus(getString(R.string.s_131), C_WARN)
-            scope.launch {
-                val err = dpg.importLoraFile(
-                    uri,
-                    onStage = { stage -> loraStatusTv?.text = stage },
-                    onProgress = { done, total -> updateDrawProgress(done, total) }
-                )
-                setBusy(false)
-                setDrawBusy(false)
-                showDrawProgress(false)
-                if (err == null) {
-                    setStatus(getString(R.string.s_220), C_OK)
-                    toast(getString(R.string.s_220))
-                } else {
-                    setStatus(getString(R.string.s_158), C_ERR)
-                    toast(err)
-                }
-                refreshLoraUi()
+    
+    }
+
+    private fun handlePickedLora(data: Intent?) {
+        val uri = data?.data ?: return
+        val dpg = drawPage ?: return
+        setBusy(true)
+        setDrawBusy(true)
+        showDrawProgress(true)
+        setStatus(getString(R.string.s_131), C_WARN)
+        scope.launch {
+            val err = dpg.importLoraFile(
+                uri,
+                onStage = { stage -> loraStatusTv?.text = stage },
+                onProgress = { done, total -> updateDrawProgress(done, total) }
+            )
+            setBusy(false)
+            setDrawBusy(false)
+            showDrawProgress(false)
+            if (err == null) {
+                setStatus(getString(R.string.s_220), C_OK)
+                toast(getString(R.string.s_220))
+            } else {
+                setStatus(getString(R.string.s_158), C_ERR)
+                toast(err)
             }
+            refreshLoraUi()
         }
-        if (requestCode == REQ_TAGGER_ONNX && resultCode == RESULT_OK) {
-            val uri = data?.data ?: return
-            val dpg = drawPage ?: return
-            setBusy(true)
-            setDrawBusy(true)
-            showDrawProgress(true)
-            setStatus(getString(R.string.s_131), C_WARN)
-            scope.launch {
-                val err = dpg.importTaggerModel(
-                    uri,
-                    onStage = { stage -> taggerStatusTv?.text = stage },
-                    onProgress = { done, total -> updateDrawProgress(done, total) }
-                )
-                setBusy(false)
-                setDrawBusy(false)
-                showDrawProgress(false)
-                if (err == null) {
-                    setStatus(getString(R.string.s_267), C_OK)
-                    toast(getString(R.string.s_269))
-                } else {
-                    setStatus(getString(R.string.s_158), C_ERR)
-                    toast(err)
-                }
-                refreshTaggerUi()
+    
+    }
+
+    private fun handlePickedTaggerOnnx(data: Intent?) {
+        val uri = data?.data ?: return
+        val dpg = drawPage ?: return
+        setBusy(true)
+        setDrawBusy(true)
+        showDrawProgress(true)
+        setStatus(getString(R.string.s_131), C_WARN)
+        scope.launch {
+            val err = dpg.importTaggerModel(
+                uri,
+                onStage = { stage -> taggerStatusTv?.text = stage },
+                onProgress = { done, total -> updateDrawProgress(done, total) }
+            )
+            setBusy(false)
+            setDrawBusy(false)
+            showDrawProgress(false)
+            if (err == null) {
+                setStatus(getString(R.string.s_267), C_OK)
+                toast(getString(R.string.s_269))
+            } else {
+                setStatus(getString(R.string.s_158), C_ERR)
+                toast(err)
             }
+            refreshTaggerUi()
         }
-        if (requestCode == REQ_TAGGER_CSV && resultCode == RESULT_OK) {
-            val uri = data?.data ?: return
-            val dpg = drawPage ?: return
-            setBusy(true)
-            setDrawBusy(true)
-            showDrawProgress(true)
-            setStatus(getString(R.string.s_131), C_WARN)
-            scope.launch {
-                val err = dpg.importTaggerCsv(
-                    uri,
-                    onStage = { stage -> taggerStatusTv?.text = stage },
-                    onProgress = { done, total -> updateDrawProgress(done, total) }
-                )
-                setBusy(false)
-                setDrawBusy(false)
-                showDrawProgress(false)
-                if (err == null) {
-                    setStatus(getString(R.string.s_268), C_OK)
-                    toast(getString(R.string.s_269))
-                } else {
-                    setStatus(getString(R.string.s_158), C_ERR)
-                    toast(err)
-                }
-                refreshTaggerUi()
+    
+    }
+
+    private fun handlePickedTaggerCsv(data: Intent?) {
+        val uri = data?.data ?: return
+        val dpg = drawPage ?: return
+        setBusy(true)
+        setDrawBusy(true)
+        showDrawProgress(true)
+        setStatus(getString(R.string.s_131), C_WARN)
+        scope.launch {
+            val err = dpg.importTaggerCsv(
+                uri,
+                onStage = { stage -> taggerStatusTv?.text = stage },
+                onProgress = { done, total -> updateDrawProgress(done, total) }
+            )
+            setBusy(false)
+            setDrawBusy(false)
+            showDrawProgress(false)
+            if (err == null) {
+                setStatus(getString(R.string.s_268), C_OK)
+                toast(getString(R.string.s_269))
+            } else {
+                setStatus(getString(R.string.s_158), C_ERR)
+                toast(err)
             }
+            refreshTaggerUi()
         }
+    
     }
 
     /** Models can't be loaded from a content:// URI, so copy them to a real file first. */
@@ -2777,20 +2788,13 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     // llama.cpp：单 slot + cache_prompt。会话内 KV 前缀会被复用，长对话只需计算新增 token。
                     // 线程数走全局设置（「关于 → 设置」），与绘图、打标共用同一个值。
                     val cpus = InferConfig.threads(this@MainActivity)
-                    val params = ModelParameters()
-                        .setModel(path)
-                        // 上下文长度与最大输出都从模型页读（默认 4096 / 2048）
-                        .setCtxSize(chatParams.ctx())
-                        .setPredict(chatParams.maxOut())
-                        .setThreads(cpus)
-                        .setThreadsBatch(cpus)
-                        .setBatchSize(512)
-                        .setParallel(1)
-                        .setKeep(64)
-                        .setGpuLayers(0)
-                    // 多模态 gguf：挂上 mmproj（视觉投影）后模型才有图像输入能力
-                    val mp = mmprojPath?.let { File(it) }?.takeIf { it.isFile }
-                    if (mp != null) params.setMmproj(mp.absolutePath)
+                    val params = ModelLoadSpecs.llamaParams(
+                        path = path,
+                        ctxSize = chatParams.ctx(),
+                        maxOut = chatParams.maxOut(),
+                        threads = cpus,
+                        mmprojPath = mmprojPath,
+                    )
                     val m = LlamaModel(params)
                     val vok = try { m.supportsVision() } catch (_: Throwable) { false }
                     withContext(Dispatchers.Main) {
@@ -2816,13 +2820,12 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     // 坑：EngineConfig.visionBackend 默认是 null，运行时就不会创建 vision executor，
                     // 发图时直接报 "Vision executor should not be null, please TryLoadingVisionExecutor() first."；
                     // 所以探测到多模态时必须显式传入 visionBackend（并同时放开 maxNumImages）。
-                    val cfg = EngineConfig(
-                        modelPath = path,
-                        // 上下文长度（token）：模型页可调；调大能装更多历史，但更吃内存
-                        maxNumTokens = chatParams.ctx(),
-                        backend = if (gpuWanted) Backend.GPU() else Backend.CPU(),
-                        visionBackend = if (vok) (if (gpuWanted) Backend.GPU() else Backend.CPU()) else null,
-                        maxNumImages = if (vok) AttachmentHandler.MAX_ATTACH else null,
+                    val cfg = ModelLoadSpecs.engineConfig(
+                        path = path,
+                        maxTokens = chatParams.ctx(),
+                        gpuWanted = gpuWanted,
+                        visionOk = vok,
+                        maxImages = AttachmentHandler.MAX_ATTACH,
                         cacheDir = cacheDir.absolutePath,
                     )
                     val eng: Engine = try {
@@ -2834,7 +2837,15 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                         // GPU 后端在这台机器上用不了 → 退回 CPU，别让用户用不了模型
                         withContext(Dispatchers.Main) { toast(getString(R.string.s_335)) }
                         usedBackendName = "CPU"
-                        val cpu = Engine(cfg.copy(backend = Backend.CPU(), visionBackend = if (vok) Backend.CPU() else null))
+                        val cpu = Engine(
+                            ModelLoadSpecs.cpuEngineConfig(
+                                path = path,
+                                maxTokens = chatParams.ctx(),
+                                visionOk = vok,
+                                maxImages = AttachmentHandler.MAX_ATTACH,
+                                cacheDir = cacheDir.absolutePath,
+                            )
+                        )
                         cpu.initialize()
                         cpu
                     }

@@ -134,6 +134,39 @@ class AttachmentHandler private constructor(
         rebuildAttachPreview()
     }
 
+    /**
+     * Importa las imágenes elegidas: decodifica en IO y añade en el hilo de UI
+     * (añadir reconstruye la tira de miniaturas). Devuelve cuántas entraron.
+     */
+    suspend fun importPickedImages(uris: List<Uri>, toJpeg: (Bitmap) -> ByteArray): Int {
+        var added = 0
+        for (u in uris) {
+            if (pendingImages.size >= MAX_ATTACH) break
+            val pair = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                decodeChatImage(u)?.let { bmp -> bmp to toJpeg(bmp) }
+            } ?: continue
+            addPendingImage(pair.first, pair.second)
+            added++
+        }
+        return added
+    }
+
+    /** Importa los archivos elegidos; devuelve el primer error, si lo hubo. */
+    suspend fun importPickedFiles(uris: List<Uri>): String? {
+        var err: String? = null
+        for (u in uris) {
+            if (pendingFiles.size >= MAX_FILES) break
+            val r = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { readTextFile(u) }
+            val f = r.file
+            if (f == null) {
+                if (err == null) err = r.error
+                continue
+            }
+            addPendingFile(f)
+        }
+        return err
+    }
+
     fun removePendingImage(index: Int) {
         if (index in pendingImages.indices) pendingImages.removeAt(index)
         rebuildAttachPreview()
