@@ -138,7 +138,15 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     override val activity: Activity get() = this
     override val palette: YumenodeTheme get() = pal
     override val drawBusy: Boolean get() = drawPage?.isBusy() == true
-    override fun applyThemeMode(mode: Int) { themeManager.setThemeMode(this, mode) }
+    override val accentIndex: Int get() = themeManager.accentIndex
+    override fun applyThemeMode(mode: Int) {
+        themeManager.setThemeMode(this, mode)
+        applyThemeInPlace()   // el callback del manager está vacío: reconstruimos aquí
+    }
+    override fun applyAccent(index: Int) {
+        themeManager.setAccent(this, index)
+        applyThemeInPlace()
+    }
     override fun toast(msg: String) {
         runOnUiThread { android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show() }
     }

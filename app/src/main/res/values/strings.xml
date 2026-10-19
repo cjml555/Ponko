@@ -520,4 +520,11 @@
     <string name="s_490">English</string>
     <string name="s_491">Español</string>
 
+    <string name="s_492">Accent color</string>
+    <string name="s_493">Cyan</string>
+    <string name="s_494">Magenta</string>
+    <string name="s_495">Lime</string>
+    <string name="s_496">Violet</string>
+    <string name="s_497">Amber</string>
+
 </resources>

@@ -22,6 +22,10 @@ class ThemeManager(
     var themeMode: Int = 0
         private set
 
+    /** Acento activo (índice en [AccentPalette]). */
+    var accentIndex: Int = 0
+        private set
+
     /**
      * Current palette derived from the selected theme mode.
      */
@@ -64,7 +68,7 @@ class ThemeManager(
      * Apply the current theme mode, resolving the palette and triggering UI rebuild.
      */
     fun applyThemeInPlace() {
-        pal = YumenodeTheme.resolve(context, themeMode)
+        pal = YumenodeTheme.resolve(context, themeMode).withAccent(accentIndex)
         onThemeApplied()
     }
 
@@ -86,6 +90,7 @@ class ThemeManager(
     /** Load theme mode from preferences. */
     fun loadThemeMode(prefs: SharedPreferences) {
         themeMode = prefs.getInt("themeMode", 0)
+        accentIndex = prefs.getInt("accentIndex", 0).coerceIn(0, AccentPalette.size - 1)
     }
 
     /** Save theme mode to preferences. */
@@ -97,8 +102,16 @@ class ThemeManager(
     /** Set theme mode, persist to prefs, and apply it. */
     fun setThemeMode(context: Context, mode: Int) {
         themeMode = mode
-        val prefs = context.getSharedPreferences("ponko_prefs", 0)
-        prefs.edit().putInt("themeMode", mode).apply()
+        // Debe ser la MISMA prefs que loadThemeMode (chatPrefs -> "ponko"),
+        // si no el tema no persiste al reiniciar.
+        context.getSharedPreferences("ponko", 0).edit().putInt("themeMode", mode).apply()
+        applyThemeInPlace()
+    }
+
+    /** Cambia el acento y lo persiste. */
+    fun setAccent(context: Context, index: Int) {
+        accentIndex = index.coerceIn(0, AccentPalette.size - 1)
+        context.getSharedPreferences("ponko", 0).edit().putInt("accentIndex", accentIndex).apply()
         applyThemeInPlace()
     }
 

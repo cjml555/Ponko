@@ -24,6 +24,9 @@ import android.view.animation.DecelerateInterpolator
  */
 interface SettingsHost {
     val activity: Activity
+    val accentIndex: Int
+    fun applyAccent(index: Int)
+
     val palette: YumenodeTheme
     val ui: UiWidgets
     val themeMode: Int
@@ -99,6 +102,34 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                 }
             }
         }
+        // ---- Color de acento ----
+        settingsBody.addView(host.ui.subTitle(getString(R.string.s_492)), matchWrap().apply { topMargin = dp(14) })
+        val accentRow = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+        }
+        val accentNames = intArrayOf(R.string.s_493, R.string.s_494, R.string.s_495, R.string.s_496, R.string.s_497)
+        for (i in 0 until AccentPalette.size) {
+            val dot = android.view.View(ctx)
+            val sizePx = dp(30)
+            dot.layoutParams = android.widget.LinearLayout.LayoutParams(sizePx, sizePx).apply { marginEnd = dp(14) }
+            val selected = i == host.accentIndex
+            dot.background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(if (host.palette.isDark) AccentPalette.dark[i] else AccentPalette.light[i])
+                setStroke(dp(if (selected) 3 else 1), if (selected) host.palette.text else host.palette.border)
+            }
+            dot.contentDescription = getString(accentNames[i])
+            dot.setOnClickListener {
+                if (i != host.accentIndex) {
+                    if (host.drawBusy) host.toast(getString(R.string.s_382))
+                    else host.applyAccent(i)
+                }
+            }
+            accentRow.addView(dot)
+        }
+        settingsBody.addView(accentRow, matchWrap().apply { topMargin = dp(10) })
+
         settingsBody.addView(themeSwitch, matchWrap().apply { topMargin = dp(12) })
 
         // ---- 推理线程数（全局：绘图 / 对话 gguf / 打标 共用；下次加载模型生效）----

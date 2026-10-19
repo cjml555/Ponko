@@ -45,6 +45,33 @@ data class YumenodeTheme(
     val navBar: Int,         // 导航栏
     val isDark: Boolean,
 ) {
+    /** Aplica un acento de la [AccentPalette], recalculando los derivados. */
+    fun withAccent(index: Int): YumenodeTheme {
+        val i = index.coerceIn(0, AccentPalette.size - 1)
+        val c = if (isDark) AccentPalette.dark[i] else AccentPalette.light[i]
+        val tint = if (isDark) blend(c, bg, 0.18f) else blend(c, 0xFFFFFFFF.toInt(), 0.12f)
+        val on = if (luminance(c) > 0.62f) 0xFF001018.toInt() else 0xFFFFFFFF.toInt()
+        return copy(
+            primary = c,
+            primarySoft = tint,
+            onPrimary = on,
+            switchThumb = c,
+            statusBar = if (isDark) statusBar else c,
+        )
+    }
+
+    private fun blend(a: Int, b: Int, t: Float): Int {
+        fun ch(sh: Int) = (((a shr sh) and 0xFF) * (1 - t) + ((b shr sh) and 0xFF) * t).toInt().coerceIn(0, 255)
+        return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
+    }
+
+    private fun luminance(c: Int): Float {
+        val r = (c shr 16) and 0xFF
+        val g = (c shr 8) and 0xFF
+        val b = c and 0xFF
+        return (0.299f * r + 0.587f * g + 0.114f * b) / 255f
+    }
+
     companion object {
         fun light() = YumenodeTheme(
             bg = 0xFFF2F4F8.toInt(),
@@ -130,4 +157,18 @@ data class YumenodeTheme(
             (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
                 Configuration.UI_MODE_NIGHT_YES
     }
+}
+
+/** Acentos seleccionables (el índice se guarda en prefs como "accentIndex"). */
+object AccentPalette {
+    val keys = arrayOf("cyan", "magenta", "lime", "violet", "amber")
+    val dark = intArrayOf(
+        0xFF00F0FF.toInt(), 0xFFFF2E9A.toInt(), 0xFF7CFF6B.toInt(),
+        0xFFA78BFA.toInt(), 0xFFFFC24B.toInt(),
+    )
+    val light = intArrayOf(
+        0xFF007C8C.toInt(), 0xFFC4146A.toInt(), 0xFF2E8B3C.toInt(),
+        0xFF6D4AE0.toInt(), 0xFFA86A00.toInt(),
+    )
+    val size get() = keys.size
 }
