@@ -155,6 +155,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     /** El modelo cargado admite 'thinking' (heurístico por nombre). El checkbox
      *  de Thinking se oculta cuando el modelo no soporta razonamiento. */
     private var modelSupportsThinking: Boolean = true
+    /** Pensamiento efectivo: el usuario lo activa Y el modelo lo admite. */
+    private val thinkingActive: Boolean get() = modelSupportsThinking && thinkCheck.isChecked
     private var taggerUi = TaggerUi(
         this,
         scope,
@@ -180,7 +182,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             canDrawFromChat = { canDrawFromChat },
             canTagTurn = { canTagTurn(it) },
             tagHint = { tagHint(it) },
-            thinkChecked = { thinkCheck.isChecked },
+            thinkChecked = { thinkingActive },
         ).apply {
             estimateTokens = { chatManager.estTokens(it).toInt() }
         }
@@ -348,6 +350,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         // 那就换个候选角色重发一次；一但试出能用的就记住，后面不再试错。
         var attempt = if (toolReturn == null) 0 else tagReturnIdx.coerceIn(0, 2)
         var genStart = 0L
+        lastTpsFoot = null
         while (true) {
             answerBuf.setLength(0)
             thoughtBuf.setLength(0)
@@ -394,7 +397,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     val splitter = ReasoningSplitter(
                         ::onThoughtDelta,
                         ::onAnswerDelta,
-                        assumeThinking = thinkCheck.isChecked,
+                        assumeThinking = thinkingActive,
                     )
 
                     val flow = channelFlow {
@@ -451,7 +454,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     }
                     val conv = conversation ?: throw IllegalStateException(getString(R.string.s_042))
                     val tc = ThinkingConfig(
-                        enableThinking = thinkCheck.isChecked,
+                        enableThinking = thinkingActive,
                         thinkingTokenBudget = chatParams.thinkBudgetOrUnlimited(),
                     )
                     val flow = when {
@@ -545,6 +548,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     "\n\n_≈" + "%.1f".format(tok / (elapsed / 1000.0)) + " tok/s · " +
                         "%.1f".format(elapsed / 1000.0) + "s_"
                 } else null
+                lastTpsFoot = foot
                 markwonFull.setMarkdown(ai.answer, if (foot != null) full + foot else full)
             }
         }
@@ -562,6 +566,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     /** .gguf 架构探测结果缓存，避免重复读头部 */
     private val ggufKindCache = HashMap<String, GgufProbe.Kind>()
     private var genJob: Job? = null
+    /** Footnote '≈X tok/s' de la última generación (solo render en vivo). */
+    private var lastTpsFoot: String? = null
 
     // QaTurn is imported from ChatState.kt
 
@@ -3415,7 +3421,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 }
                 turn.answer = shown.trimEnd()
                 if (turn.answer.isNotEmpty()) {
-                    markwonFull.setMarkdown(ai.answer, turn.answer)
+                    markwonFull.setMarkdown(ai.answer, turn.answer + (lastTpsFoot ?: ""))
                 } else if (turn.thought.isEmpty()) {
                     // 第一轮被隐藏、模型又什么都没说：给个提示，别留一个空气泡
                     ai.answer.text = getString(R.string.s_007)
