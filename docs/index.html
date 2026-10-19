@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yumenode AI — IA local en tu Android</title>
+<meta name="description" content="Yumenode AI: chat, imágenes y etiquetado con modelos de IA que corren 100% en tu Android. Sin cuenta, sin telemetría automática. Benchmark anónimo y rankings por tok/s.">
+<meta property="og:title" content="Yumenode AI — IA local en tu Android">
+<meta property="og:description" content="Chat, Stable Diffusion y tagger offline en tu teléfono. Benchmark anónimo con rankings por tok/s.">
+<meta property="og:image" content="img/icon.webp">
+<link rel="icon" href="img/icon.webp">
+<style>
+  :root{
+    --bg:#020814; --bg2:#0A0D1A; --surface:#0F1730; --surface2:#121A33;
+    --top:#1A237E; --primary:#00F0FF; --accent:#FF007F; --text:#E8ECF5;
+    --sub:#8A96B4; --border:#2E4A8C; --ok:#38E8A0;
+    --radius:18px; --max:1120px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  a{color:var(--primary);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:var(--max);margin:0 auto;padding:0 22px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  /* ---------- nav ---------- */
+  nav{
+    position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
+    background:rgba(2,8,20,.72);border-bottom:1px solid rgba(46,74,140,.45);
+  }
+  nav .wrap{display:flex;align-items:center;gap:18px;height:64px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.2px;color:var(--text)}
+  .brand img{width:32px;height:32px;border-radius:50%;box-shadow:0 0 18px rgba(0,240,255,.45)}
+  .brand b{color:var(--primary)}
+  nav .links{display:flex;gap:20px;margin-left:auto;font-size:14.5px}
+  nav .links a{color:var(--sub)}
+  nav .links a:hover{color:var(--text);text-decoration:none}
+  nav .gh{
+    margin-left:10px;padding:8px 14px;border:1px solid var(--border);border-radius:999px;
+    font-size:14px;color:var(--text);background:rgba(26,35,126,.35)
+  }
+  nav .gh:hover{background:rgba(26,35,126,.7);text-decoration:none}
+  @media(max-width:760px){ nav .links{display:none} }
+
+  /* ---------- hero ---------- */
+  header.hero{position:relative;padding:92px 0 74px;overflow:hidden}
+  header.hero::before{
+    content:"";position:absolute;inset:-30% -10% auto -10%;height:720px;pointer-events:none;
+    background:
+      radial-gradient(46% 46% at 22% 22%, rgba(0,240,255,.20), transparent 70%),
+      radial-gradient(38% 38% at 78% 18%, rgba(255,0,127,.16), transparent 70%),
+      radial-gradient(40% 40% at 55% 70%, rgba(26,35,126,.45), transparent 72%);
+    filter:blur(4px);
+  }
+  header.hero::after{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.35;
+    background-image:linear-gradient(rgba(46,74,140,.22) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(46,74,140,.22) 1px,transparent 1px);
+    background-size:54px 54px;
+    mask-image:radial-gradient(ellipse at 50% 30%,#000 20%,transparent 72%);
+  }
+  .hero .wrap{position:relative;z-index:2}
+  .kicker{
+    display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;
+    border:1px solid rgba(0,240,255,.35);background:rgba(0,240,255,.07);
+    font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--primary)
+  }
+  h1{
+    font-size:clamp(40px,7vw,74px);line-height:1.03;letter-spacing:-.03em;
+    margin:18px 0 14px;font-weight:850
+  }
+  h1 .g{
+    background:linear-gradient(96deg,var(--primary) 8%,#8AF7FF 44%,#B79BFF 78%);
+    -webkit-background-clip:text;background-clip:text;color:transparent
+  }
+  .lead{max-width:660px;color:var(--sub);font-size:18px}
+  .lead b{color:var(--text);font-weight:600}
+  .cta{display:flex;flex-wrap:wrap;gap:12px;margin:28px 0 22px}
+  .btn{
+    display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:12px;
+    font-weight:700;font-size:15px;border:1px solid transparent;transition:.15s
+  }
+  .btn.primary{
+    background:linear-gradient(135deg,var(--primary),#5FF3FF);color:#00131A;
+    box-shadow:0 10px 34px rgba(0,240,255,.28)
+  }
+  .btn.primary:hover{transform:translateY(-1px);box-shadow:0 14px 40px rgba(0,240,255,.4);text-decoration:none}
+  .btn.ghost{border-color:var(--border);color:var(--text);background:rgba(18,26,51,.6)}
+  .btn.ghost:hover{background:rgba(26,35,126,.55);text-decoration:none}
+  .pills{display:flex;flex-wrap:wrap;gap:9px}
+  .pill{
+    font-size:12.5px;color:var(--sub);border:1px solid rgba(46,74,140,.6);
+    padding:5px 11px;border-radius:999px;background:rgba(15,23,48,.55)
+  }
+  .pill b{color:var(--text)}
+
+  /* ---------- sections ---------- */
+  section{padding:70px 0;border-top:1px solid rgba(46,74,140,.28)}
+  .sec-head{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:30px}
+  h2{font-size:clamp(26px,3.6vw,36px);margin:0;letter-spacing:-.02em}
+  h2 span{color:var(--primary)}
+  .sec-sub{color:var(--sub);margin:6px 0 0;max-width:640px}
+  .eyebrow{color:var(--primary);font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;margin:0 0 8px}
+
+  /* features */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:600px){.grid{grid-template-columns:1fr}}
+  .card{
+    background:linear-gradient(180deg,rgba(18,26,51,.92),rgba(10,13,26,.92));
+    border:1px solid rgba(46,74,140,.5);border-radius:var(--radius);padding:22px;
+    position:relative;overflow:hidden
+  }
+  .card::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 80% at 0% 0%,rgba(0,240,255,.07),transparent 60%)
+  }
+  .card .ico{font-size:24px;line-height:1;margin-bottom:12px;display:block}
+  .card h3{margin:0 0 7px;font-size:17px}
+  .card p{margin:0;color:var(--sub);font-size:14.5px}
+
+  /* screenshots */
+  .shots{display:flex;gap:18px;overflow-x:auto;padding:6px 2px 18px;scroll-snap-type:x mandatory}
+  .shot{flex:0 0 auto;width:210px;scroll-snap-align:start;text-align:center}
+  .shot img{
+    width:100%;border-radius:16px;border:1px solid rgba(46,74,140,.55);
+    box-shadow:0 18px 44px rgba(0,0,0,.5),0 0 0 1px rgba(0,240,255,.06) inset;
+    background:#0A0D1A
+  }
+  .shot span{display:block;margin-top:10px;font-size:13px;color:var(--sub)}
+
+  /* ---------- benchmark ---------- */
+  .bench-bar{
+    display:flex;flex-wrap:wrap;align-items:center;gap:14px;
+    background:rgba(15,23,48,.72);border:1px solid rgba(46,74,140,.5);
+    border-radius:14px;padding:12px 16px;margin-bottom:22px
+  }
+  .live{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--sub)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse 1.8s infinite}
+  .dot.err{background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .switch{margin-left:auto;display:inline-flex;background:#070E1F;border:1px solid var(--border);border-radius:999px;padding:3px}
+  .switch button{
+    border:0;background:transparent;color:var(--sub);font:inherit;font-size:13.5px;
+    padding:7px 16px;border-radius:999px;cursor:pointer
+  }
+  .switch button.on{background:rgba(0,240,255,.16);color:var(--primary);font-weight:700;box-shadow:0 0 18px rgba(0,240,255,.18) inset}
+
+  .panel{display:none}
+  .panel.on{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  table{width:100%;border-collapse:collapse}
+  thead th{
+    text-align:left;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--sub);font-weight:600;padding:10px 12px;border-bottom:1px solid rgba(46,74,140,.55);white-space:nowrap
+  }
+  tbody td{padding:13px 12px;border-bottom:1px solid rgba(46,74,140,.22);font-size:14.5px;vertical-align:middle}
+  tbody tr:hover{background:rgba(0,240,255,.035)}
+  td.rank{font-weight:800;color:var(--sub);width:54px}
+  tr:nth-child(1) td.rank{color:#FFD24A}
+  tr:nth-child(2) td.rank{color:#CFD8E8}
+  tr:nth-child(3) td.rank{color:#E29A5A}
+  td.model{font-weight:600;max-width:420px;overflow-wrap:anywhere}
+  td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+  td.num b{color:var(--primary);font-size:15.5px}
+  .mini{height:6px;border-radius:99px;background:rgba(46,74,140,.4);overflow:hidden;min-width:110px}
+  .mini i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--primary),#8AF7FF);transition:width .7s cubic-bezier(.2,.8,.2,1)}
+
+  .ranks{display:grid;gap:11px}
+  .rank-card{
+    display:flex;align-items:center;gap:16px;padding:15px 18px;border-radius:14px;
+    background:linear-gradient(180deg,rgba(18,26,51,.9),rgba(10,13,26,.9));
+    border:1px solid rgba(46,74,140,.45)
+  }
+  .rank-card.top1{border-color:rgba(255,210,74,.45);box-shadow:0 0 26px rgba(255,210,74,.07)}
+  .medal{font-size:22px;width:38px;text-align:center;flex:0 0 38px}
+  .medal.n{font-weight:800;color:var(--sub);font-size:15px}
+  .rc-main{flex:1;min-width:0}
+  .rc-name{font-weight:650;font-size:15px;overflow-wrap:anywhere}
+  .rc-meta{color:var(--sub);font-size:12.5px;margin:3px 0 8px}
+  .rc-tps{text-align:right;flex:0 0 auto}
+  .rc-tps b{display:block;font-size:24px;line-height:1;color:var(--primary);font-variant-numeric:tabular-nums}
+  .rc-tps span{font-size:11px;color:var(--sub);letter-spacing:.08em;text-transform:uppercase}
+
+  .split{display:grid;grid-template-columns:1.55fr 1fr;gap:26px;margin-top:34px}
+  @media(max-width:900px){.split{grid-template-columns:1fr}}
+  h3.blk{font-size:16px;margin:0 0 12px;color:var(--text)}
+  .empty{color:var(--sub);padding:26px;text-align:center;border:1px dashed rgba(46,74,140,.6);border-radius:14px}
+  .notice{
+    margin-top:22px;padding:16px 18px;border-radius:14px;font-size:14px;color:var(--sub);
+    border:1px solid rgba(0,240,255,.28);background:rgba(0,240,255,.05)
+  }
+  .notice b{color:var(--text)}
+
+  footer{border-top:1px solid rgba(46,74,140,.3);padding:34px 0 46px;color:var(--sub);font-size:13.5px}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center}
+  footer a{color:var(--sub)}
+  footer a:hover{color:var(--primary)}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="img/icon.webp" alt="">Yumenode <b>AI</b></a>
+    <div class="links">
+      <a href="#features">Características</a>
+      <a href="#shots">Capturas</a>
+      <a href="#bench">Benchmark</a>
+      <a href="https://github.com/cjml555/Yumenode-AI#readme">Docs</a>
+    </div>
+    <a class="gh" href="https://github.com/cjml555/Yumenode-AI">GitHub ↗</a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <span class="kicker">● 100% en tu dispositivo</span>
+    <h1>Inteligencia artificial<br><span class="g">local en tu Android</span></h1>
+    <p class="lead">Chat, generación de imágenes y etiquetado con modelos que corren <b>enteramente en tu teléfono</b>. Sin cuenta, sin telemetría automática y sin que tus datos salgan del dispositivo.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/cjml555/Yumenode-AI/releases/latest">⬇ Descargar APK</a>
+      <a class="btn ghost" href="https://github.com/cjml555/Yumenode-AI">Ver el código</a>
+    </div>
+    <div class="pills">
+      <span class="pill"><b>MIT</b></span>
+      <span class="pill"><b>arm64-v8a</b> · minSdk 28</span>
+      <span class="pill">llama.cpp · LiteRT-LM</span>
+      <span class="pill">Stable Diffusion</span>
+      <span class="pill">API OpenAI-compatible</span>
+      <span class="pill">Sin cuenta</span>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <p class="eyebrow">Qué hace</p>
+    <div class="sec-head">
+      <div>
+        <h2>Todo el stack de IA, <span>offline</span></h2>
+        <p class="sec-sub">Cinco pestañas: Chat, Modelos/API, Dibujar, Modelos libres y Ajustes. Todo corre en el teléfono, sin servidores.</p>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card"><span class="ico">💬</span><h3>Chat multimodal</h3><p>Modelos <span class="mono">.gguf</span> y <span class="mono">.litertlm</span>, streaming token a token, imágenes, archivos y documentos.</p></div>
+      <div class="card"><span class="ico">🎨</span><h3>Generación de imágenes</h3><p>Stable Diffusion GGUF: texto→imagen, imagen→imagen, LCM-LoRA y TAESD.</p></div>
+      <div class="card"><span class="ico">🏷️</span><h3>Etiquetado automático</h3><p>Taggers ONNX (WD14) que extraen etiquetas de tus imágenes, todo local.</p></div>
+      <div class="card"><span class="ico">🌐</span><h3>API OpenAI-compatible</h3><p>Expón el modelo cargado en <span class="mono">/v1/chat/completions</span> para usarlo desde otra máquina o un agente.</p></div>
+      <div class="card"><span class="ico">🔒</span><h3>Privado por diseño</h3><p>Sin cuenta ni telemetría automática. Nada sale del dispositivo salvo lo que tú decidas compartir.</p></div>
+      <div class="card"><span class="ico">📊</span><h3>Benchmark transparente</h3><p>Mide tok/s y latencia en tu hardware; comparte el resultado de forma anónima si quieres.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="shots">
+  <div class="wrap">
+    <p class="eyebrow">Capturas</p>
+    <h2>Así se ve</h2>
+    <p class="sec-sub" style="margin-bottom:26px">Interfaz oscura con acentos neón, pensada para leer y generar cómodamente.</p>
+    <div class="shots">
+      <div class="shot"><img src="img/chat_tab_thumb.png" alt="Chat"><span>Chat</span></div>
+      <div class="shot"><img src="img/models_tab_thumb.png" alt="Modelos/API"><span>Modelos/API</span></div>
+      <div class="shot"><img src="img/draw_tab_thumb.png" alt="Dibujar"><span>Dibujar</span></div>
+      <div class="shot"><img src="img/download_tab_thumb.png" alt="Modelos libres"><span>Modelos libres</span></div>
+      <div class="shot"><img src="img/about_tab_thumb.png" alt="Ajustes"><span>Ajustes</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="bench">
+  <div class="wrap">
+    <p class="eyebrow">Benchmark en vivo</p>
+    <div class="sec-head">
+      <div>
+        <h2>Rankings por <span>tokens/segundo</span></h2>
+        <p class="sec-sub">Reportes anónimos enviados desde la app (Ajustes → Benchmark → Compartir anónimamente). Sin identificadores ni IPs: solo modelo, backend, dispositivo, SoC, versión, tok/s, latencia y tokens.</p>
+      </div>
+    </div>
+
+    <div class="bench-bar">
+      <span class="live"><span class="dot" id="dot"></span><span id="meta">Cargando reportes…</span></span>
+      <div class="switch" role="tablist" aria-label="Vista">
+        <button id="btnTable" class="on" role="tab" aria-selected="true">Tabla</button>
+        <button id="btnList" role="tab" aria-selected="false">Lista</button>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="panel on" id="paneTable">
+      <table aria-label="Ranking de modelos por tok/s">
+        <thead>
+          <tr><th>#</th><th>Modelo</th><th>Reportes</th><th>tok/s prom</th><th>Mín</th><th>Máx</th><th>Rendimiento</th></tr>
+        </thead>
+        <tbody id="tbody"><tr><td colspan="7" class="empty">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Lista -->
+    <div class="panel" id="paneList">
+      <div class="ranks" id="ranks"><div class="empty">Cargando…</div></div>
+    </div>
+
+    <div class="split">
+      <div>
+        <h3 class="blk">Dispositivos</h3>
+        <table aria-label="Dispositivos que han reportado">
+          <thead><tr><th>Dispositivo</th><th>SoC</th><th>Reportes</th></tr></thead>
+          <tbody id="devices"><tr><td colspan="3" class="empty">—</td></tr></tbody>
+        </table>
+      </div>
+      <div>
+        <h3 class="blk">Últimos reportes</h3>
+        <table aria-label="Reportes recientes">
+          <thead><tr><th>Modelo</th><th>Backend</th><th>tok/s</th></tr></thead>
+          <tbody id="recent"><tr><td colspan="3" class="empty">—</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="notice">
+      <b>¿Quieres aparecer aquí?</b> Carga un modelo de chat en la app, ve a <b>Ajustes → Benchmark → Ejecutar benchmark</b> y pulsa <b>Compartir anónimamente</b>. Es opcional: el benchmark se ejecuta y se muestra localmente aunque no compartas nada.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© Yumenode AI · Fork de <a href="https://github.com/visitor257/Ponko">Ponko</a> (MIT)</span>
+    <span>
+      <a href="https://github.com/cjml555/Yumenode-AI">Repositorio</a> ·
+      <a href="https://github.com/cjml555/Yumenode-AI/blob/main/NOTICE">NOTICE</a> ·
+      <a href="https://yumenode-bench.cjml555.workers.dev">Dashboard del Worker</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var STATS = "https://yumenode-bench.cjml555.workers.dev/api/stats";
+  var state = { data: null, view: "table" };
+
+  var $ = function(id){ return document.getElementById(id); };
+  var esc = function(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  }); };
+  var f1 = function(v){ return (v == null || isNaN(v)) ? "—" : Number(v).toFixed(1); };
+
+  function ranked(){
+    var m = (state.data && state.data.models) || {};
+    return Object.keys(m).map(function(name){
+      var v = m[name] || {};
+      var n = v.n || 0;
+      return {
+        name: name,
+        n: n,
+        avg: n ? (v.tps_sum || 0) / n : 0,
+        min: v.tps_min == null ? null : v.tps_min,
+        max: v.tps_max == null ? null : v.tps_max
+      };
+    }).sort(function(a, b){ return b.avg - a.avg; });
+  }
+
+  function renderMeta(){
+    var d = state.data || {};
+    var n = d.count || 0;
+    var upd = d.updated ? new Date(d.updated) : null;
+    var txt = n + (n === 1 ? " reporte anónimo" : " reportes anónimos");
+    if (upd) txt += " · actualizado " + upd.toLocaleString("es", {dateStyle:"medium", timeStyle:"short"});
+    $("meta").textContent = txt;
+    $("dot").className = "dot";
+  }
+
+  function renderTable(rows){
+    if (!rows.length){
+      $("tbody").innerHTML = '<tr><td colspan="7" class="empty">Aún no hay reportes. ¡Sé el primero en compartir uno!</td></tr>';
+      return;
+    }
+    var max = rows[0].avg || 1;
+    $("tbody").innerHTML = rows.map(function(r, i){
+      var w = Math.max(3, Math.round((r.avg / max) * 100));
+      return '<tr>' +
+        '<td class="rank">' + (i + 1) + '</td>' +
+        '<td class="model">' + esc(r.name) + '</td>' +
+        '<td class="num">' + r.n + '</td>' +
+        '<td class="num"><b>' + f1(r.avg) + '</b></td>' +
+        '<td class="num">' + f1(r.min) + '</td>' +
+        '<td class="num">' + f1(r.max) + '</td>' +
+        '<td><div class="mini"><i style="width:' + w + '%"></i></div></td>' +
+      '</tr>';
+    }).join("");
+  }
+
+  function renderList(rows){
+    if (!rows.length){
+      $("ranks").innerHTML = '<div class="empty">Aún no hay reportes. ¡Sé el primero en compartir uno!</div>';
+      return;
+    }
+    var max = rows[0].avg || 1;
+    var medals = ["🥇", "🥈", "🥉"];
+    $("ranks").innerHTML = rows.map(function(r, i){
+      var w = Math.max(3, Math.round((r.avg / max) * 100));
+      var medal = i < 3 ? '<div class="medal">' + medals[i] + '</div>'
+                        : '<div class="medal n">#' + (i + 1) + '</div>';
+      return '<article class="rank-card' + (i === 0 ? " top1" : "") + '">' +
+        medal +
+        '<div class="rc-main">' +
+          '<div class="rc-name">' + esc(r.name) + '</div>' +
+          '<div class="rc-meta">' + r.n + (r.n === 1 ? " reporte" : " reportes") +
+            ' · mín ' + f1(r.min) + ' · máx ' + f1(r.max) + ' tok/s</div>' +
+          '<div class="mini"><i style="width:' + w + '%"></i></div>' +
+        '</div>' +
+        '<div class="rc-tps"><b>' + f1(r.avg) + '</b><span>tok/s</span></div>' +
+      '</article>';
+    }).join("");
+  }
+
+  function renderDevices(){
+    var d = (state.data && state.data.devices) || {};
+    var keys = Object.keys(d).sort(function(a, b){ return (d[b].n || 0) - (d[a].n || 0); });
+    if (!keys.length){ $("devices").innerHTML = '<tr><td colspan="3" class="empty">—</td></tr>'; return; }
+    $("devices").innerHTML = keys.map(function(k){
+      return '<tr><td class="model">' + esc(k) + '</td><td>' + esc(d[k].soc || "—") +
+             '</td><td class="num">' + (d[k].n || 0) + '</td></tr>';
+    }).join("");
+  }
+
+  function renderRecent(){
+    var r = (state.data && state.data.recent) || [];
+    if (!r.length){ $("recent").innerHTML = '<tr><td colspan="3" class="empty">—</td></tr>'; return; }
+    $("recent").innerHTML = r.slice(0, 8).map(function(x){
+      return '<tr><td class="model">' + esc(x.model) + '</td><td>' + esc(x.backend || "—") +
+             '</td><td class="num">' + f1(x.tps_avg) + '</td></tr>';
+    }).join("");
+  }
+
+  function render(){
+    var rows = ranked();
+    renderMeta();
+    renderTable(rows);
+    renderList(rows);
+    renderDevices();
+    renderRecent();
+  }
+
+  function fail(err){
+    $("dot").className = "dot err";
+    $("meta").textContent = "No se pudo cargar el benchmark (" + (err && err.message ? err.message : "error") + ")";
+    var msg = '<tr><td colspan="7" class="empty">No se pudo cargar. Reintenta en unos segundos.</td></tr>';
+    $("tbody").innerHTML = msg;
+    $("ranks").innerHTML = '<div class="empty">No se pudo cargar el benchmark.</div>';
+  }
+
+  function load(){
+    fetch(STATS, {cache: "no-store"})
+      .then(function(r){ if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function(j){ state.data = j; render(); })
+      .catch(fail);
+  }
+
+  function setView(v){
+    state.view = v;
+    var t = v === "table";
+    $("paneTable").className = "panel" + (t ? " on" : "");
+    $("paneList").className = "panel" + (t ? "" : " on");
+    $("btnTable").className = t ? "on" : "";
+    $("btnList").className = t ? "" : "on";
+    $("btnTable").setAttribute("aria-selected", String(t));
+    $("btnList").setAttribute("aria-selected", String(!t));
+    // re-animar barras
+    if (state.data) render();
+  }
+
+  $("btnTable").addEventListener("click", function(){ setView("table"); });
+  $("btnList").addEventListener("click", function(){ setView("list"); });
+
+  load();
+  setInterval(load, 60000);
+})();
+</script>
+</body>
+</html>
