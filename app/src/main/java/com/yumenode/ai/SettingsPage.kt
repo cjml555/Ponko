@@ -102,6 +102,8 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                 }
             }
         }
+        settingsBody.addView(themeSwitch, matchWrap().apply { topMargin = dp(12) })
+
         // ---- Color de acento ----
         settingsBody.addView(host.ui.subTitle(getString(R.string.s_492)), matchWrap().apply { topMargin = dp(14) })
         val accentRow = android.widget.LinearLayout(ctx).apply {
@@ -130,7 +132,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         }
         settingsBody.addView(accentRow, matchWrap().apply { topMargin = dp(10) })
 
-        settingsBody.addView(themeSwitch, matchWrap().apply { topMargin = dp(12) })
+
 
         // ---- 推理线程数（全局：绘图 / 对话 gguf / 打标 共用；下次加载模型生效）----
         // 放在「设置」分区而不是绘图页：它管的是所有 CPU 推理，不是绘图专属。
