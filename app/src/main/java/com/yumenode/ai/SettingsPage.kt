@@ -191,9 +191,11 @@ class SettingsPage(private val host: SettingsHost) {
 
         aboutBody.addView(host.ui.pageTitle(getString(R.string.s_043)), matchWrap().apply { topMargin = dp(14) })
         aboutBody.addView(host.ui.hintText("visitor257"))
+        // Crédito original + nota de fork: rebautizado y refactorizado
+        aboutBody.addView(host.ui.hintText("Original: Ponko © visitor257 (MIT). Derivado como fork, rebautizado y parcialmente refactorizado como Yumenode AI."))
 
         aboutBody.addView(host.ui.pageTitle(getString(R.string.s_194)), matchWrap().apply { topMargin = dp(14) })
-        aboutBody.addView(linkText(getString(R.string.s_107), "https://github.com/visitor257/Ponko"))
+        aboutBody.addView(linkText(getString(R.string.s_107), "https://github.com/cjml555/Yumenode-AI"))
 
         // ---- 声明（「关于」最底：AI 产出免责 + 开源版权 + 指向 README / NOTICE）----
         // 单独成段而不是并进上面的「许可」：许可是"我用了谁的"，声明是"产出归谁负责"，
@@ -204,10 +206,10 @@ class SettingsPage(private val host: SettingsHost) {
         aboutBody.addView(host.ui.hintText(getString(R.string.s_450)))
         aboutBody.addView(host.ui.hintText(getString(R.string.s_451)))
         aboutBody.addView(
-            linkText(getString(R.string.s_452), "https://github.com/visitor257/Ponko/blob/main/README.md")
+            linkText(getString(R.string.s_452), "https://github.com/cjml555/Yumenode-AI/blob/main/README.md")
         )
         aboutBody.addView(
-            linkText(getString(R.string.s_453), "https://github.com/visitor257/Ponko/blob/main/NOTICE")
+            linkText(getString(R.string.s_453), "https://github.com/cjml555/Yumenode-AI/blob/main/NOTICE")
         )
 
         sv.addView(card, FrameLayout.LayoutParams(

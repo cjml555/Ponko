@@ -25,7 +25,7 @@
 <string name="s_022">LoRA accel (LCM-LoRA · few-step)</string>
 <string name="s_023">LoRA ready</string>
 <string name="s_024">LoRA weight</string>
-<string name="s_025">Yumenode AI — del japonés 夢ノード (Yume Node), que significa " nodo de los sueños ". Un chat AI local offline con modelos de lenguaje y estabilidad diffusion. Todos los modelos e inferencias corren en este dispositivo; el historial de chat se almacena solo localmente.</string>
+<string name="s_025">Yumenode AI — del japonés 夢ノード (Yume Node), que significa " nodo de los sueños ". Un chat AI local offline con modelos de lenguaje y estabilidad diffusion. Todos los modelos e inferencias corren en este dispositivo; el historial de chat se almacena solo localmente. Derivado de Ponko (© visitor257, MIT): rebautizado como Yumenode AI y parcialmente refactorizado.</string>
 <string name="s_026">\nAfter deleting, LoRA accel on the Draw page stops working.</string>
 <string name="s_028">hf-mirror.com (China mirror)</string>
 <string name="s_029">huggingface.co (official)</string>
@@ -104,7 +104,7 @@
 <string name="s_104">Thinking mode</string>
 <string name="s_105">Thinking mode (reason first, model support required)</string>
 <string name="s_106">No draw model (.gguf) or LoRA (.safetensors) found in the selected folder</string>
-<string name="s_107">Open Ponko\'s GitHub page</string>
+<string name="s_107">Open Yumenode AI\'s GitHub page</string>
 <string name="s_108">Prompt</string>
 <string name="s_109">New chat</string>
 <string name="s_110">FA off</string>
@@ -472,7 +472,7 @@
 <string name="s_447">/ %1$d</string>
 <string name="s_448">Disclaimer</string>
 <string name="s_449">Everything this app produces - text, images, tags and so on - is generated automatically by AI models running on your device. It may be inaccurate, incomplete or biased; it does not represent the developer\'s views and is not advice of any kind. The developer cannot foresee, review or control the output, makes no warranty as to its accuracy, legality or fitness for any purpose, and accepts no liability for any consequence of using it. Judge the results yourself, use them at your own risk, and do not use them for anything unlawful or that infringes the rights of others.</string>
-<string name="s_450">Ponko is open-source software. The source code is released under the MIT License; artwork (app icon, character art, original drawings) remains © the author, all rights reserved, and is not covered by the MIT License; the third-party components it bundles are governed by their own licenses, each © its respective authors.</string>
+<string name="s_450">Yumenode AI is open-source software — a fork of Ponko (© visitor257, MIT). The source code is released under the MIT License; artwork (app icon, character art, original drawings) remains © the author, all rights reserved, and is not covered by the MIT License; the third-party components it bundles are governed by their own licenses, each © its respective authors.</string>
 <string name="s_451">For the fuller picture - features and usage, known limitations, the complete list of third-party components and their full license texts - see the README and the NOTICE in the project repository.</string>
 <string name="s_452">View the README on GitHub</string>
 <string name="s_453">View the NOTICE on GitHub</string>
