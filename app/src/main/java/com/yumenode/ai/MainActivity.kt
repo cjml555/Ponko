@@ -101,7 +101,7 @@ import com.yumenode.ai.tagRolesGguf
  * On-device chat app that loads a Google LiteRT-LM (.litertlm) model from local
  * storage and runs it via com.google.ai.edge.litertlm.
  *
- * UI: flat modern look — blue app bar, card-style settings panel, chat bubbles,
+ * UI: flat modern look — deep surface app bar, card-style settings panel, chat bubbles,
  * bottom input bar, collapsible "thinking" section, and Markdown-rendered replies.
  */
 class MainActivity : Activity(), SettingsHost {
@@ -1015,7 +1015,7 @@ class MainActivity : Activity(), SettingsHost {
     private fun buildAppBar(): View {
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(C_PRIMARY)
+            setBackgroundColor(C_CARD)
             setPadding(dp(10), dp(10), dp(10), dp(10))
             elevation = dp(3).toFloat()
         }
@@ -1034,7 +1034,7 @@ class MainActivity : Activity(), SettingsHost {
         titleBox.addView(TextView(this).apply {
             text = "Yumenode AI"
             textSize = 17f
-            setTextColor(Color.WHITE)
+            setTextColor(C_PRIMARY)
             typeface = Typeface.DEFAULT_BOLD
         }, matchWrap())
         val statusRow = LinearLayout(this).apply {
@@ -1042,12 +1042,12 @@ class MainActivity : Activity(), SettingsHost {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(2), 0, 0)
         }
-        statusDot = View(this).apply { background = rounded(Color.WHITE, 99) }
+        statusDot = View(this).apply { background = rounded(C_PRIMARY, 99) }
         statusRow.addView(statusDot, LinearLayout.LayoutParams(dp(7), dp(7)).apply { rightMargin = dp(5) })
         statusTv = TextView(this).apply {
             text = getString(R.string.s_116)
             textSize = 11.5f
-            setTextColor(Color.parseColor("#DCE5FF"))
+            setTextColor(C_SUBTEXT)
         }
         statusRow.addView(statusTv, wrapWrap())
         titleBox.addView(statusRow, matchWrap())
