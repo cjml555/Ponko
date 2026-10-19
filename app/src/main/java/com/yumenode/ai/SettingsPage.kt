@@ -40,15 +40,11 @@ interface SettingsHost {
  * Pestaña «Acerca de / Ajustes»: tema, hilos de inferencia y créditos.
  * Extraída de MainActivity.
  */
-class SettingsPage(private val host: SettingsHost) {
+class SettingsPage(private val host: SettingsHost) : ThemeAliases {
 
     private val ctx: Activity get() = host.activity
-    private val pal: YumenodeTheme get() = host.palette
 
-    private val C_TEXT get() = pal.text
-    private val C_SUBTEXT get() = pal.subText
-    private val C_FIELD_BG get() = pal.fieldBg
-    private val C_PRIMARY get() = pal.primary
+    override val palette: YumenodeTheme get() = host.palette
 
     fun build(): View = with(ctx) {
 

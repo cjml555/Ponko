@@ -104,7 +104,7 @@ import com.yumenode.ai.tagRolesGguf
  * UI: flat modern look — deep surface app bar, card-style settings panel, chat bubbles,
  * bottom input bar, collapsible "thinking" section, and Markdown-rendered replies.
  */
-class MainActivity : Activity(), SettingsHost {
+class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
     // ---- palette ----
     // ================= 主题 =================
@@ -123,31 +123,6 @@ class MainActivity : Activity(), SettingsHost {
     /** 当前配色表 */
     val pal: YumenodeTheme
         get() = themeManager.pal
-
-    // ── Color aliases delegados a themeManager ──
-    val C_PRIMARY get() = themeManager.primary
-    val C_PRIMARY_SOFT get() = themeManager.primarySoft
-    val C_BG get() = themeManager.bg
-    val C_BG_ALT get() = themeManager.bgAlt
-    val C_CARD get() = themeManager.surface
-    val C_FIELD_BG get() = themeManager.fieldBg
-    val C_SOFT_BTN get() = themeManager.softBtn
-    val C_SOFT_BTN2 get() = themeManager.softBtn2
-    val C_BORDER get() = themeManager.border
-    val C_CHIP_BG get() = themeManager.chipBg
-    val C_DIVIDER get() = themeManager.divider
-    val C_DIVIDER_LINE get() = themeManager.dividerLine
-    val C_TEXT get() = themeManager.text
-    val C_SUBTEXT get() = themeManager.subText
-    val C_HINT get() = themeManager.hint
-    val C_THOUGHT_BG get() = themeManager.thoughtBg
-    val C_THOUGHT_TEXT get() = themeManager.thoughtText
-    val C_OK get() = themeManager.ok
-    val C_WARN get() = themeManager.warn
-    val C_ERR get() = themeManager.err
-    val C_IDLE get() = themeManager.idle
-    val C_ERR_TEXT get() = themeManager.errText
-    val C_SCRIM get() = themeManager.scrim
 
     // ---- Manager dependencies ----
     private val crashHandler = CrashHandler(this)

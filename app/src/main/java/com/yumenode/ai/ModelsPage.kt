@@ -19,11 +19,12 @@ import java.io.File
  * y estado necesario. Las vistas resultantes se exponen como públicas
  * para que la Activity pueda acceder.
  */
-class ModelsPage(private val host: ModelsHost) {
+class ModelsPage(private val host: ModelsHost) : ThemeAliases {
 
     private val activity: Activity get() = host.activity
     private val ui: UiWidgets get() = host.ui
     private val pal: YumenodeTheme get() = host.palette
+    override val palette: YumenodeTheme get() = pal
 
     // ── vistas expuestas para MainActivity ──
     lateinit var backendSpinner: Spinner
@@ -73,15 +74,7 @@ class ModelsPage(private val host: ModelsHost) {
     var loraBox: LinearLayout? = null
         private set
 
-    // colores (equivalente a los C_* de MainActivity)
-    private val C_BG_ALT get() = pal.bgAlt
-    private val C_CARD get() = pal.surface
-    private val C_TEXT get() = pal.text
-    private val C_SUBTEXT get() = pal.subText
-    private val C_PRIMARY get() = pal.primary
-    private val C_ERR get() = pal.err
-
-    private fun dp(v: Int): Int = UiHelpers.dp(v, activity)
+    private fun dp(p: Int): Int = UiHelpers.dp(p, activity)
     private fun getString(resId: Int): String = activity.getString(resId)
     private fun matchWrap(topMargin: Int = 0) =
         LinearLayout.LayoutParams(

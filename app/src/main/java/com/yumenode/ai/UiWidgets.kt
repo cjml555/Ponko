@@ -19,16 +19,10 @@ import android.widget.TextView
  */
 class UiWidgets(
     private val ctx: Activity,
-    private val palette: () -> YumenodeTheme,
-) {
+    private val paletteProvider: () -> YumenodeTheme,
+) : ThemeAliases {
 
-    private val pal: YumenodeTheme get() = palette()
-    private val C_CARD get() = pal.surface
-    private val C_TEXT get() = pal.text
-    private val C_SUBTEXT get() = pal.subText
-    private val C_PRIMARY get() = pal.primary
-    private val C_PRIMARY_SOFT get() = pal.primarySoft
-    private val C_DIVIDER get() = pal.divider
+    override val palette: YumenodeTheme get() = paletteProvider()
 
     /** Tarjeta blanca con esquinas redondeadas. */
     fun card(): LinearLayout = with(ctx) {

@@ -40,17 +40,14 @@ class ChatImageHandler(
     private val ctx: Context,
     private val scope: CoroutineScope,
     private val host: ChatImageHost,
-) {
+) : ThemeAliases {
 
     /** directorio privado donde se guardan las imágenes del chat */
     private val chatImgDir: File
         get() = File(ctx.filesDir, "chatimg").apply { mkdirs() }
 
     // ── colores ──
-    private val pal get() = host.palette
-    private val C_TEXT get() = pal.text
-    private val C_SUBTEXT get() = pal.subText
-    private val C_ERR_TEXT get() = pal.errText
+    override val palette: YumenodeTheme get() = host.palette
 
     // ── lectura / escritura de imágenes ──
     /** Lee una imagen ya guardada en chatimg/ por nombre de archivo. */

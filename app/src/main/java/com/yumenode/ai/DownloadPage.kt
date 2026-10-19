@@ -31,12 +31,9 @@ class DownloadPage(
     private val onModelsChanged: () -> Unit,
     /** Paleta activa (los colores cambian con el tema). */
     private val pal: YumenodeTheme,
-) {
+) : ThemeAliases {
 
-    private val C_CARD get() = pal.surface
-    private val C_PRIMARY get() = pal.primary
-    private val C_SUBTEXT get() = pal.subText
-    private val C_TEXT get() = pal.text
+    override val palette: YumenodeTheme get() = pal
 
     private var scrollView: ScrollView? = null
     private var container: LinearLayout? = null
