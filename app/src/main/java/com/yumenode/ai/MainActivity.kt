@@ -156,7 +156,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     override fun shareBenchmark(endpoint: String, onResult: (String) -> Unit) {
         val b = lastBench
         if (b == null) { onResult("Run the benchmark first."); return }
-        val url = endpoint.trim()
+        val url = endpoint.trim().ifBlank { DEFAULT_BENCH_ENDPOINT }
         if (!url.startsWith("http")) { onResult("Set a valid endpoint URL first."); return }
         scope.launch {
             val body = JSONObject().apply {

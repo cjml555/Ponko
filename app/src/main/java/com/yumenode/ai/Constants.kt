@@ -29,3 +29,7 @@ internal const val KEY_UI_ABOUT_OPEN = "uiAboutOpen"
 internal const val MAX_TAG_ROUNDS = 2
 // ---- think-mode toggle (global pref, model-independent) ----
 internal const val KEY_CHAT_THINK = "chatThink"
+
+// ---- Benchmark: endpoint por defecto (hardcoded) + override en Ajustes ----
+internal const val DEFAULT_BENCH_ENDPOINT = "https://yumenode-bench.cjml555.workers.dev/api/report"
+internal const val KEY_BENCH_ENDPOINT = "bench_endpoint"

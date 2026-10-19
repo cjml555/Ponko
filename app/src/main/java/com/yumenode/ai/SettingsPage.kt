@@ -187,7 +187,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
 
         // optional: share anonymously to the endpoint from bench/worker
         val benchEndpoint = EditText(ctx).apply {
-            setText(host.prefStr("bench_endpoint", ""))
+            setText(host.prefStr(KEY_BENCH_ENDPOINT, DEFAULT_BENCH_ENDPOINT))
             hint = "https://…/api/report"
             textSize = 12f
             setTextColor(C_TEXT)
@@ -198,7 +198,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
             addTextChangedListener(object : android.text.TextWatcher {
                 override fun afterTextChanged(s: android.text.Editable?) {
-                    host.prefPutStr("bench_endpoint", s?.toString() ?: "")
+                    host.prefPutStr(KEY_BENCH_ENDPOINT, s?.toString() ?: "")
                 }
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -214,7 +214,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             }
         }
         settingsBody.addView(shareBtn, matchWrap().apply { topMargin = dp(6) })
-        settingsBody.addView(host.ui.hintText("Optional: paste the endpoint URL from bench/worker and share the last benchmark anonymously."), matchWrap().apply { topMargin = dp(4) })
+        settingsBody.addView(host.ui.hintText("Optional: custom endpoint. Defaults to the Yumenode bench Worker; paste another URL to override."), matchWrap().apply { topMargin = dp(4) })
 
         // ---- 关于（可折叠，默认展开；展开状态同样记在偏好里）----
         val aboutBody = collapsibleSection(
