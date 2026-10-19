@@ -496,4 +496,8 @@
     <string name="s_469">Selecciona un modelo para descargar</string>
     <string name="s_470">Progreso</string>
 
+    <string name="s_471">Draw page failed to initialize:</string>
+    <string name="s_472">Select mmproj:</string>
+    <string name="s_473">Downloading…</string>
+
 </resources>

@@ -143,7 +143,7 @@ class DownloadPage(
                         val btnLabel = btn.text
                         btn.isEnabled = false
                         btn.alpha = 0.6f
-                        btn.text = "Descargando…"
+                        btn.text = ctx.getString(R.string.s_473)
 
                         val pb = ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal).apply {
                             max = 100

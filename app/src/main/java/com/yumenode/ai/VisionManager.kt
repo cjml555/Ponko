@@ -131,7 +131,7 @@ class VisionManager(
         }
         mmprojContainer.visibility = View.VISIBLE
         mmprojContainer.addView(TextView(ctx).apply {
-            text = "Selecciona mmproj:"
+            text = ctx.getString(R.string.s_472)
             textSize = 12f
             setTextColor(0xFF888888.toInt())
         }, LinearLayout.LayoutParams(

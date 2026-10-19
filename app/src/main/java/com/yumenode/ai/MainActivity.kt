@@ -999,7 +999,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             ScrollView(this).apply {
                 setBackgroundColor(C_BG)
                 addView(TextView(this@MainActivity).apply {
-                    text = "绘图页初始化失败：\n" + android.util.Log.getStackTraceString(e)
+                    text = getString(R.string.s_471) + "\n" + android.util.Log.getStackTraceString(e)
                     textSize = 12f
                     setTextColor(C_ERR_TEXT)
                     setPadding(36, 36, 36, 36)
