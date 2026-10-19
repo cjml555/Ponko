@@ -125,7 +125,7 @@ class TaggerUi(
         selected: Boolean,
         onClick: () -> Unit,
     ): TextView = TextView(context).apply {
-        text = "▶ ${file.name}　${fmtSize(file.length())}"
+        text = "▶ ${file.name}　${UiHelpers.fmtSize(file.length())}"
         textSize = 12.5f
         setTextColor(if (selected) pal.primary else pal.text)
         setPadding(context.dp(12), context.dp(8), context.dp(12), context.dp(8))
@@ -138,10 +138,4 @@ class TaggerUi(
         setOnClickListener { onClick() }
     }
 
-    private fun fmtSize(bytes: Long): String = when {
-        bytes >= 1L shl 30 -> String.format("%.2f GB", bytes.toDouble() / (1L shl 30))
-        bytes >= 1L shl 20 -> String.format("%.1f MB", bytes.toDouble() / (1L shl 20))
-        bytes >= 1L shl 10 -> String.format("%.0f KB", bytes.toDouble() / (1L shl 10))
-        else -> "$bytes B"
-    }
 }

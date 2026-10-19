@@ -4,7 +4,6 @@ package com.yumenode.ai
 import android.content.Context
 import android.text.InputType
 import android.text.TextWatcher
-import android.view.Gravity
 import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -22,42 +21,11 @@ class UiHelpers {
             else -> "$bytes B"
         }
 
-        fun fmtTimeMs(ms: Long): String = when {
-            ms >= 3600000 -> String.format("%.1f小时", ms.toDouble() / 3600000)
-            ms >= 60000 -> String.format("%.1f分钟", ms.toDouble() / 60000)
-            ms >= 1000 -> String.format("%.0f秒", ms.toDouble() / 1000)
-            else -> "${ms}毫秒"
-        }
-
         /**
          * DP to pixel conversion helper
          */
         fun dp(value: Int, context: Context): Int {
             return (value * context.resources.displayMetrics.density).toInt()
-        }
-
-        /** Helper for LayoutParams: MATCH_PARENT, WRAP_CONTENT with margins */
-        fun matchWrap(context: Context, topMargin: Int = 0, bottomMargin: Int = 0, leftMargin: Int = 0, rightMargin: Int = 0): LinearLayout.LayoutParams {
-            val lparams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            lparams.setMargins(
-                dp(leftMargin, context),
-                dp(topMargin, context),
-                dp(rightMargin, context),
-                dp(bottomMargin, context)
-            )
-            return lparams
-        }
-
-        /** Helper for LayoutParams: WRAP_CONTENT, WRAP_CONTENT with margins */
-        fun wrapWrap(context: Context, topMargin: Int = 0, bottomMargin: Int = 0, leftMargin: Int = 0, rightMargin: Int = 0): LinearLayout.LayoutParams {
-            val lparams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            lparams.setMargins(
-                dp(leftMargin, context),
-                dp(topMargin, context),
-                dp(rightMargin, context),
-                dp(bottomMargin, context)
-            )
-            return lparams
         }
 
         /** Number input field helper */
@@ -105,8 +73,14 @@ class UiHelpers {
                 })
             }
             keep(edit)
-            layout.addView(edit, matchWrap(context).apply { topMargin = dp(4, context) })
-            layout.addView(hintTextView(context, hint, palette), matchWrap(context).apply { topMargin = dp(3, context) })
+            layout.addView(edit, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(4, context) })
+            layout.addView(hintTextView(context, hint, palette), LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(3, context) })
             return layout
         }
 

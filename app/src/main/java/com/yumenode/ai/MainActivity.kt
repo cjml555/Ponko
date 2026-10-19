@@ -2236,7 +2236,7 @@ class MainActivity : Activity(), SettingsHost {
                 }
                 withContext(Dispatchers.Main) {
                     modelPath = dest.absolutePath
-                    modelInfoText.text = getString(R.string.v_002, (dest.name), (fmtSize(dest.length())))
+                    modelInfoText.text = getString(R.string.v_002, (dest.name), (UiHelpers.fmtSize(dest.length())))
                     setStatus(getString(R.string.s_093), C_WARN)
                     refreshSavedModels()
                     loadChatParamsIntoUi()
@@ -2306,7 +2306,7 @@ class MainActivity : Activity(), SettingsHost {
                 else -> "LiteRT"
             }
             val chip = TextView(this).apply {
-                text = "▶ ${f.name}　[$tag] ${fmtSize(f.length())}"
+                text = "▶ ${f.name}　[$tag] ${UiHelpers.fmtSize(f.length())}"
                 textSize = 12.5f
                 setTextColor(
                     if (incomplete) C_ERR_TEXT
@@ -2426,7 +2426,7 @@ class MainActivity : Activity(), SettingsHost {
                 val suffix = if (role.isEmpty()) "" else "　[$role]"
                 val q = s.mainFile()?.let { dpg?.quantOf(it) }
                 val qTag = if (q != null) "　[$q]" else ""
-                text = "▶ ${s.mainFile()?.name ?: s.name}$suffix$qTag　${fmtSize(s.sizeBytes())}"
+                text = "▶ ${s.mainFile()?.name ?: s.name}$suffix$qTag　${UiHelpers.fmtSize(s.sizeBytes())}"
                 textSize = 12.5f
                 setTextColor(if (isSel) C_PRIMARY else C_TEXT)
                 setPadding(dp(12), dp(8), dp(12), dp(8))
@@ -2500,9 +2500,9 @@ class MainActivity : Activity(), SettingsHost {
                     lastPct = pct
                     runOnUiThread {
                         loraStatusTv?.text = if (pct >= 0)
-                            getString(R.string.v_008, (src), (pct), (fmtSize(done)), (fmtSize(total)))
+                            getString(R.string.v_008, (src), (pct), (UiHelpers.fmtSize(done)), (UiHelpers.fmtSize(total)))
                         else
-                            getString(R.string.v_009, (src), (fmtSize(done)))
+                            getString(R.string.v_009, (src), (UiHelpers.fmtSize(done)))
                     }
                 }
             }
@@ -2570,7 +2570,7 @@ class MainActivity : Activity(), SettingsHost {
             return
         }
         modelPath = f.absolutePath
-        modelInfoText.text = getString(R.string.v_013, (f.name), (fmtSize(f.length())))
+        modelInfoText.text = getString(R.string.v_013, (f.name), (UiHelpers.fmtSize(f.length())))
         setStatus(getString(R.string.s_096), C_WARN)
         refreshSavedModels()
         // 参数是按模型分别保存的，切换模型时把该模型那套回填到输入框
@@ -2584,7 +2584,7 @@ class MainActivity : Activity(), SettingsHost {
         }
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.s_055))
-            .setMessage(getString(R.string.v_014, (f.name), (fmtSize(f.length()))))
+            .setMessage(getString(R.string.v_014, (f.name), (UiHelpers.fmtSize(f.length()))))
             .setPositiveButton(getString(R.string.s_050)) { _, _ ->
                 f.delete()
                 if (modelPath == f.absolutePath) {
@@ -3129,103 +3129,6 @@ class MainActivity : Activity(), SettingsHost {
         toast(getString(R.string.s_292))
     }
 
-    /** 全屏看图用的 ImageView：双指缩放 + 拖动 + 双击放大，缩放范围 1x~8x。 */
-    private class ZoomImageView(ctx: android.content.Context) : ImageView(ctx) {
-        private val mtx = Matrix()
-        private var base = 1f
-        private var cur = 1f
-        private var lastX = 0f
-        private var lastY = 0f
-        private var down = false
-        var onTapAtFit: (() -> Unit)? = null
-
-        private val scaleDet = ScaleGestureDetector(ctx,
-            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-                override fun onScale(det: ScaleGestureDetector): Boolean {
-                    val want = (cur * det.scaleFactor).coerceIn(1f, 8f)
-                    val r = want / cur
-                    if (r == 1f) return true
-                    cur = want
-                    mtx.postScale(r, r, det.focusX, det.focusY)
-                    clamp()
-                    imageMatrix = mtx
-                    return true
-                }
-            })
-
-        private val tapDet = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDown(e: MotionEvent): Boolean = true
-            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                if (cur <= 1.01f) onTapAtFit?.invoke()
-                return true
-            }
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                val want = if (cur > 1.05f) 1f else 2.5f
-                val r = want / cur
-                cur = want
-                mtx.postScale(r, r, e.x, e.y)
-                clamp()
-                imageMatrix = mtx
-                return true
-            }
-        })
-
-        init { setScaleType(ImageView.ScaleType.MATRIX) }
-
-        override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
-            super.onSizeChanged(w, h, ow, oh)
-            reset()
-        }
-
-        /** 回到「适配并居中」状态 */
-        fun reset() {
-            val d = drawable ?: return
-            val vw = width.toFloat()
-            val vh = height.toFloat()
-            val dw = d.intrinsicWidth.toFloat()
-            val dh = d.intrinsicHeight.toFloat()
-            if (vw <= 0f || vh <= 0f || dw <= 0f || dh <= 0f) return
-            base = minOf(vw / dw, vh / dh)
-            cur = 1f
-            mtx.reset()
-            mtx.postScale(base, base)
-            mtx.postTranslate((vw - dw * base) / 2f, (vh - dh * base) / 2f)
-            imageMatrix = mtx
-        }
-
-        /** 缩放后把图拉回可视范围，避免拖出去找不回来 */
-        private fun clamp() {
-            if (cur <= 1.01f) { reset(); return }
-            val d = drawable ?: return
-            val v = FloatArray(9)
-            mtx.getValues(v)
-            val sw = d.intrinsicWidth * base * cur
-            val sh = d.intrinsicHeight * base * cur
-            v[Matrix.MTRANS_X] = if (sw <= width) (width - sw) / 2f else v[Matrix.MTRANS_X].coerceIn(width - sw, 0f)
-            v[Matrix.MTRANS_Y] = if (sh <= height) (height - sh) / 2f else v[Matrix.MTRANS_Y].coerceIn(height - sh, 0f)
-            mtx.setValues(v)
-        }
-
-        override fun onTouchEvent(ev: MotionEvent): Boolean {
-            scaleDet.onTouchEvent(ev)
-            tapDet.onTouchEvent(ev)
-            when (ev.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { lastX = ev.x; lastY = ev.y; down = true }
-                MotionEvent.ACTION_MOVE -> {
-                    if (down && cur > 1.01f && !scaleDet.isInProgress) {
-                        mtx.postTranslate(ev.x - lastX, ev.y - lastY)
-                        clamp()
-                        imageMatrix = mtx
-                    }
-                    lastX = ev.x
-                    lastY = ev.y
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> down = false
-            }
-            return true
-        }
-    }
-
     private fun attachImageBubble(ai: AiArea, bmp: Bitmap, name: String) {
         val iv = ImageView(this).apply {
             setImageBitmap(bmp)
@@ -3750,12 +3653,6 @@ class MainActivity : Activity(), SettingsHost {
     // ================= helpers =================
 
 
-    private fun fmtSize(bytes: Long): String = when {
-        bytes >= 1L shl 30 -> String.format("%.2f GB", bytes.toDouble() / (1L shl 30))
-        bytes >= 1L shl 20 -> String.format("%.1f MB", bytes.toDouble() / (1L shl 20))
-        bytes >= 1L shl 10 -> String.format("%.0f KB", bytes.toDouble() / (1L shl 10))
-        else -> "$bytes B"
-    }
 
     private fun setBusy(b: Boolean) {
         busy = b
@@ -3854,7 +3751,7 @@ class MainActivity : Activity(), SettingsHost {
         onLongClick: (() -> Unit)? = null,
         onClick: () -> Unit
     ) = TextView(this).apply {
-        text = "▶ ${f.name}　${fmtSize(f.length())}"
+        text = "▶ ${f.name}　${UiHelpers.fmtSize(f.length())}"
         textSize = 12.5f
         setTextColor(if (selected) C_PRIMARY else C_TEXT)
         setPadding(dp(12), dp(8), dp(12), dp(8))
