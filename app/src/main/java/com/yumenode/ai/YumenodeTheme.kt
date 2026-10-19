@@ -146,10 +146,31 @@ data class YumenodeTheme(
             isDark = true,
         )
 
-        /** 主题模式：0=跟随系统 1=浅色 2=深色 */
+        /** OLED: negro puro (#000000) para paneles OLED; ahorra batería y evita el gris elevado. */
+        fun oled() = dark().copy(
+            bg = 0xFF000000.toInt(),
+            bgAlt = 0xFF000000.toInt(),
+            surface = 0xFF000000.toInt(),
+            fieldBg = 0xFF080808.toInt(),
+            softBtn = 0xFF0E0E0E.toInt(),
+            softBtn2 = 0xFF101010.toInt(),
+            border = 0xFF2A2A2A.toInt(),
+            chipBg = 0xFF0A0A0A.toInt(),
+            divider = 0x14FFFFFF,
+            dividerLine = 0xFF1A1A1A.toInt(),
+            thoughtBg = 0xFF0A0A0A.toInt(),
+            mediaBg = 0xFF000000.toInt(),
+            scrim = 0xCC000000.toInt(),
+            switchTrack = 0xFF0A0A0A.toInt(),
+            statusBar = 0xFF000000.toInt(),
+            navBar = 0xFF000000.toInt(),
+        )
+
+        /** 主题模式：0=跟随系统 1=浅色 2=深色 3=OLED */
         fun resolve(ctx: Context, mode: Int): YumenodeTheme = when (mode) {
             1 -> light()
             2 -> dark()
+            3 -> oled()
             else -> if (systemDark(ctx)) dark() else light()
         }
 

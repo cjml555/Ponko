@@ -70,13 +70,15 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         val themeSwitch = SegmentedSwitch(
             ctx,
             arrayOf(
-                getString(R.string.s_378), getString(R.string.s_377), getString(R.string.s_379)
+                getString(R.string.s_378), getString(R.string.s_377),
+                getString(R.string.s_379), getString(R.string.s_498)
             ),
             host.palette,
-            // 档位顺序：0=亮 1=跟随系统 2=暗；themeMode 的取值是 0=跟随系统 1=浅色 2=深色
+            // 档位：0=Claro 1=Sistema 2=Oscuro 3=OLED; themeMode: 0=Sistema 1=Claro 2=Oscuro 3=OLED
             when (host.themeMode) {
                 1 -> 0
                 2 -> 2
+                3 -> 3
                 else -> 1
             },
         )
@@ -84,6 +86,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             val mode = when (i) {
                 0 -> 1
                 2 -> 2
+                3 -> 3
                 else -> 0
             }
             if (mode != host.themeMode) {
@@ -94,6 +97,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
                         when (host.themeMode) {
                             1 -> 0
                             2 -> 2
+                            3 -> 3
                             else -> 1
                         }
                     )

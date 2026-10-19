@@ -124,6 +124,7 @@ Tres modos de tema en **Ajustes → Tema**:
 - **Brillante** — forzado
 - **Oscuro** — forzado
 - **Sistema** — sigue el tema del sistema
+- **OLED** — negro puro (#000000) para pantallas OLED: ahorra batería y da negros reales
 - **Color de acento** — cian (por defecto), magenta, lima, violeta o ámbar; se aplica al instante
 
 Los colores del UI incluyen: fondos, tarjetas, inputs, botones, diálogos, barra de estado y barra de navegación — todo sigue el tema sin reiniciar la app.

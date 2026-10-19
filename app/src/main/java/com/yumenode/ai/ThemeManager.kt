@@ -119,5 +119,6 @@ class ThemeManager(
         const val THEME_MODE_DEFAULT = 0
         const val THEME_MODE_LIGHT = 1
         const val THEME_MODE_DARK = 2
+        const val THEME_MODE_OLED = 3
     }
 }
