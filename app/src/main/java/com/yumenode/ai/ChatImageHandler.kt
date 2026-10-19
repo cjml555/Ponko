@@ -19,7 +19,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
-import com.google.ai.edge.litertlm.Capabilities
+import com.google.ai.edge.litertlm.ModelInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -83,7 +83,7 @@ class ChatImageHandler(
     // ── visión ──
     /** Explora si un modelo .litertlm soporta entrada visual. Cualquier excepción → false. */
     fun probeVision(path: String): Boolean = try {
-        Capabilities(path).use { it.inputModalities().vision }
+        ModelInfo.from(path).use { it.inputModalities().vision }
     } catch (_: Throwable) {
         false
     }

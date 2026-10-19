@@ -49,7 +49,7 @@ import androidx.annotation.ColorInt
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
 import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.Capabilities
+import com.google.ai.edge.litertlm.ModelInfo
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.yumenode.ai.draw.DrawPage
@@ -1587,7 +1587,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
     /** 探测 .litertlm 模型是否支持图像输入；任何异常都按「不支持」处理。 */
     private fun probeVision(path: String): Boolean = try {
-        Capabilities(path).use { it.inputModalities().vision }
+        ModelInfo.from(path).use { it.inputModalities().vision }
     } catch (_: Throwable) {
         false
     }
@@ -2665,7 +2665,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                         engine = eng
                         llamaModel = null
                         ChatCore.attachLiteRt(eng, path.substringAfterLast('/'), vok)
-                            modelSupportsThinking = guessSupportsThinking(path.substringAfterLast('/'))
+                            modelSupportsThinking = probeThinking(path)
                         chatParams.markModelLoaded(path)
                         tagReturnIdx = 0
                         conversation = conv
@@ -2939,6 +2939,16 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         val n = name.lowercase()
         return n.contains("r1") || n.contains("qwen3") || n.contains("thinking") ||
             n.contains("kimi") || n.contains("deepseek-reasoning")
+    }
+
+    /** Lee supportsThinking() real del modelo LiteRT (API 0.18+); si falla, usa la heurística. */
+    private fun probeThinking(path: String): Boolean = try {
+        ModelInfo.from(path).use {
+            (it as? ModelInfo.Llm)?.supportsThinking()
+                ?: guessSupportsThinking(path.substringAfterLast('/'))
+        }
+    } catch (_: Throwable) {
+        guessSupportsThinking(path.substringAfterLast('/'))
     }
 
     private fun renderTurn(t: QaTurn) {

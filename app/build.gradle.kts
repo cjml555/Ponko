@@ -86,7 +86,7 @@ android {
 
 dependencies {
     // Google LiteRT-LM Android API (loads & runs .litertlm models)
-    implementation("com.google.ai.edge.litertlm:litertlm-android:0.17.0")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.0")
     // Coroutines (the streaming sendMessageAsync returns a Flow)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     // GGUF (llama.cpp) local model runtime — full llama.cpp API incl. KV-cache reuse
@@ -97,7 +97,7 @@ dependencies {
     implementation("io.noties.markwon:ext-tables:4.6.2")
     implementation("io.noties.markwon:ext-strikethrough:4.6.2")
     implementation("io.noties.markwon:linkify:4.6.2")
-    implementation("androidx.viewpager:viewpager:1.0.0")
+    implementation("androidx.viewpager:viewpager:1.1.0")
     // 打标（Tagger）：ONNX Runtime，运行用户导入的 WD14 类 .onnx 模型（arm64-v8a）
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
     // PDF 文本抽取（对话发送 PDF）：Tom Roush 的 PDFBox Android 移植
