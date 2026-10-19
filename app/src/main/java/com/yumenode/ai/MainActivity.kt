@@ -152,6 +152,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private var engine: Engine? = null
     private var conversation: Conversation? = null
     private var modelPath: String? = null
+    /** El modelo cargado admite 'thinking' (heurístico por nombre). El checkbox
+     *  de Thinking se oculta cuando el modelo no soporta razonamiento. */
+    private var modelSupportsThinking: Boolean = true
     private var taggerUi = TaggerUi(
         this,
         scope,
@@ -344,10 +347,12 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         // 「工具返回」轮：模板/引擎可能不认 system、tool 角色（会直接抛错），
         // 那就换个候选角色重发一次；一但试出能用的就记住，后面不再试错。
         var attempt = if (toolReturn == null) 0 else tagReturnIdx.coerceIn(0, 2)
+        var genStart = 0L
         while (true) {
             answerBuf.setLength(0)
             thoughtBuf.setLength(0)
             try {
+                genStart = SystemClock.uptimeMillis()
                 if (gguf) {
                     val lm = llamaModel ?: return RoundOut("", "")
                     val extra: List<net.ladenthin.llama.value.Pair<String, String>> = if (toolReturn == null) {
@@ -532,7 +537,16 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 ai.answer.setTextColor(C_TEXT)
                 turn.answer = th
             }
-            full.isNotEmpty() -> markwonFull.setMarkdown(ai.answer, full)
+            full.isNotEmpty() -> {
+                // tps: estimación ~4 chars/token; nota itálica al pie (no persistida en turn.answer)
+                val elapsed = SystemClock.uptimeMillis() - genStart
+                val foot = if (elapsed >= 50 && ans.isNotEmpty()) {
+                    val tok = ans.length / 4.0
+                    "\n\n_≈" + "%.1f".format(tok / (elapsed / 1000.0)) + " tok/s · " +
+                        "%.1f".format(elapsed / 1000.0) + "s_"
+                } else null
+                markwonFull.setMarkdown(ai.answer, if (foot != null) full + foot else full)
+            }
         }
         ai.thoughtBody.text = thoughtPrefix + th
         chatScrollManager?.scrollToBottom()
@@ -977,6 +991,16 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         }
         appBarMenu = ui.iconButton("☰") { openDrawer() }
         r1.addView(appBarMenu, wrapWrap())
+
+        // Ícono de la app en el header, justo al lado del nombre
+        val appIcon = ImageView(this).apply {
+            setImageResource(R.mipmap.ic_launcher)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+        }
+        r1.addView(appIcon, LinearLayout.LayoutParams(dp(36), dp(36)).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            marginEnd = dp(8)
+        })
 
         val titleBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2590,6 +2614,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                         visionOk = vok
                         // 登记到进程级单例：对话 API 服务要复用同一个模型
                         ChatCore.attachGguf(m, path.substringAfterLast('/'), vok)
+                        modelSupportsThinking = guessSupportsThinking(path.substringAfterLast('/'))
                         chatParams.markModelLoaded(path)
                         tagReturnIdx = 0
                         engine = null
@@ -2634,6 +2659,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                         engine = eng
                         llamaModel = null
                         ChatCore.attachLiteRt(eng, path.substringAfterLast('/'), vok)
+                            modelSupportsThinking = guessSupportsThinking(path.substringAfterLast('/'))
                         chatParams.markModelLoaded(path)
                         tagReturnIdx = 0
                         conversation = conv
@@ -2675,6 +2701,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         engine = null
         llamaModel = null
         chatParams.markModelUnloaded()
+        modelSupportsThinking = true
         tagReturnIdx = 0
         conversation = null
         convThinking = null
@@ -2890,10 +2917,22 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private fun updateThinkEnabled() {
         // 可能由 IO 线程上的回调触发；setEnabled 会驱动 Ripple 动画，必须回主线程
         runOnUiThread {
-            val enabled = !drawMode
+            val visible = modelSupportsThinking
+            val enabled = visible && !drawMode
+            thinkCheck.visibility = if (visible) View.VISIBLE else View.GONE
             thinkCheck.isEnabled = enabled
             thinkCheck.alpha = if (enabled) 1f else 0.45f
         }
+    }
+
+    /** Heurística por nombre para saber si un modelo admite reasoning/thinking.
+     *  No hay API fiable en litertlm para 'supportsThinking' (Capabilities solo
+     *  expone inputModalities().vision), así que se basa en el nombre del archivo.
+     *  Familias razonantes conocidas: DeepSeek-R1, Qwen3, Kimi/K1, etc. */
+    private fun guessSupportsThinking(name: String): Boolean {
+        val n = name.lowercase()
+        return n.contains("r1") || n.contains("qwen3") || n.contains("thinking") ||
+            n.contains("kimi") || n.contains("deepseek-reasoning")
     }
 
     private fun renderTurn(t: QaTurn) {
