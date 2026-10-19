@@ -1,17 +1,17 @@
-# Yumenode AI · (c) 2026 visitor257 · MIT License · github.com/visitor257/Ponko
+# Yumenode AI · (c) 2026 visitor257 · MIT License · github.com/visitor257/Yumenode AI
 # Yumenode AI —— 自编 stable-diffusion.cpp 的构建脚本
 #
 # 这里做三件事：
 #   1. 以子目录方式引入 sd.cpp（源码在 ./sd，含内联的 ggml，已剔除不用的词表/示例等）
 #   2. 使用实测最优的编译标志（ARMv8.2-A + dotprod + fp16 + -O3）
-#   3. 编译 JNI 桥 → libponko_sd.so
+#   3. 编译 JNI 桥 → libyumenode_sd.so
 #
 # 此前这两个 .so 是手工编译后塞进 jniLibs/ 的，容易出现「改了 C++ 源码但 .so 没重编」
 # 的静默错配（包能构建成功，跑起来却是旧行为）。改成这里现场编译后，
 # 每次 assembleRelease 的产物必然与当前源码一致。
 
 cmake_minimum_required(VERSION 3.22.1)
-project(ponko_sd CXX C)
+project(yumenode_sd CXX C)
 
 # ---------------------------------------------------------------------------
 # 编译标志
@@ -28,8 +28,8 @@ foreach(_cfg RELEASE RELWITHDEBINFO MINSIZEREL)
 endforeach()
 
 # 限制并行度：源码含若干超大翻译单元，8GB 内存的机器上 -j4 会 OOM（LLVM ERROR: out of memory）
-set_property(GLOBAL PROPERTY JOB_POOLS ponko_compile=2)
-set(CMAKE_JOB_POOL_COMPILE ponko_compile)
+set_property(GLOBAL PROPERTY JOB_POOLS yumenode_compile=2)
+set(CMAKE_JOB_POOL_COMPILE yumenode_compile)
 
 # ---------------------------------------------------------------------------
 # sd.cpp 选项（必须在 add_subdirectory 之前用 CACHE ... FORCE 设好）
@@ -78,11 +78,11 @@ if (SD_VULKAN)
     # （与 NDK 的 vulkan_core.h 同为 1.3.275）。只追加 include 路径，不覆盖 NDK 的 C 头。
     include_directories("${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/include")
     # ggml-vulkan 还会 include SPIRV-Headers 的 C++ 头（spirv/unified1/spirv.hpp），NDK 里自带有
-    set(_ponko_spirv_hpp_inc "${ANDROID_NDK}/sources/third_party/shaderc/third_party/spirv-tools/external/spirv-headers/include")
-    if (EXISTS "${_ponko_spirv_hpp_inc}/spirv/unified1/spirv.hpp")
-        include_directories("${_ponko_spirv_hpp_inc}")
+    set(_yumenode_spirv_hpp_inc "${ANDROID_NDK}/sources/third_party/shaderc/third_party/spirv-tools/external/spirv-headers/include")
+    if (EXISTS "${_yumenode_spirv_hpp_inc}/spirv/unified1/spirv.hpp")
+        include_directories("${_yumenode_spirv_hpp_inc}")
     else ()
-        message(WARNING "Yumenode AI: spirv.hpp not found in the NDK (${_ponko_spirv_hpp_inc})")
+        message(WARNING "Yumenode AI: spirv.hpp not found in the NDK (${_yumenode_spirv_hpp_inc})")
     endif ()
 
     # 注意：交叉编译时 WIN32 指的是【目标平台】（这里是 Android），所以必须用 host 判断
@@ -93,55 +93,55 @@ if (SD_VULKAN)
         # Windows 的 MAX_PATH：ggml 的 host 工具（vulkan-shaders-gen）用 ExternalProject 构建，
         # 默认会落在 <build>/.cxx/<config>/<hash>/<abi>/sd/ggml/... 这种超深目录里，
         # MSVC 因对象文件路径超过 250 字符直接报 C1083。用 EP_BASE 把它挪到短目录（只影响这个 host 工具）。
-        set(_ponko_ep_base "$ENV{TEMP}/ponko-ep")
-        if (NOT _ponko_ep_base OR _ponko_ep_base STREQUAL "/ponko-ep")
-            set(_ponko_ep_base "C:/ponko-ep")
+        set(_yumenode_ep_base "$ENV{TEMP}/yumenode-ep")
+        if (NOT _yumenode_ep_base OR _yumenode_ep_base STREQUAL "/yumenode-ep")
+            set(_yumenode_ep_base "C:/yumenode-ep")
         endif ()
-        file(TO_CMAKE_PATH "${_ponko_ep_base}" _ponko_ep_base)
-        set_property(DIRECTORY PROPERTY EP_BASE "${_ponko_ep_base}")
-        message(STATUS "Yumenode AI: external project base = ${_ponko_ep_base}")
+        file(TO_CMAKE_PATH "${_yumenode_ep_base}" _yumenode_ep_base)
+        set_property(DIRECTORY PROPERTY EP_BASE "${_yumenode_ep_base}")
+        message(STATUS "Yumenode AI: external project base = ${_yumenode_ep_base}")
     endif ()
 
     if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
-        set(_ponko_host_tag "windows-x86_64")
-        set(_ponko_glslc_name "glslc.exe")
+        set(_yumenode_host_tag "windows-x86_64")
+        set(_yumenode_glslc_name "glslc.exe")
     elseif (CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
-        set(_ponko_host_tag "darwin-x86_64")
-        set(_ponko_glslc_name "glslc")
+        set(_yumenode_host_tag "darwin-x86_64")
+        set(_yumenode_glslc_name "glslc")
     else ()
-        set(_ponko_host_tag "linux-x86_64")
-        set(_ponko_glslc_name "glslc")
+        set(_yumenode_host_tag "linux-x86_64")
+        set(_yumenode_glslc_name "glslc")
     endif ()
 
     if (NOT Vulkan_GLSLC_EXECUTABLE)
-        set(_ponko_glslc "${ANDROID_NDK}/shader-tools/${_ponko_host_tag}/${_ponko_glslc_name}")
-        if (EXISTS "${_ponko_glslc}")
-            set(Vulkan_GLSLC_EXECUTABLE "${_ponko_glslc}" CACHE FILEPATH "glslc bundled with the NDK" FORCE)
-            message(STATUS "Yumenode AI: glslc = ${_ponko_glslc}")
+        set(_yumenode_glslc "${ANDROID_NDK}/shader-tools/${_yumenode_host_tag}/${_yumenode_glslc_name}")
+        if (EXISTS "${_yumenode_glslc}")
+            set(Vulkan_GLSLC_EXECUTABLE "${_yumenode_glslc}" CACHE FILEPATH "glslc bundled with the NDK" FORCE)
+            message(STATUS "Yumenode AI: glslc = ${_yumenode_glslc}")
         else ()
-            message(WARNING "Yumenode AI: glslc not found in the NDK (${_ponko_glslc}); set Vulkan_GLSLC_EXECUTABLE or install the Vulkan SDK")
+            message(WARNING "Yumenode AI: glslc not found in the NDK (${_yumenode_glslc}); set Vulkan_GLSLC_EXECUTABLE or install the Vulkan SDK")
         endif ()
     endif ()
 
     if (NOT SPIRV-Headers_DIR)
-        set(_ponko_spirv_inc "${ANDROID_NDK}/sources/third_party/shaderc/third_party/spirv-tools/external/spirv-headers/include")
-        if (EXISTS "${_ponko_spirv_inc}/spirv/unified1/spirv.hpp")
-            set(_ponko_cfg_dir "${CMAKE_BINARY_DIR}/ponko-spirv-headers")
-            file(MAKE_DIRECTORY "${_ponko_cfg_dir}")
-            file(WRITE "${_ponko_cfg_dir}/SPIRV-HeadersConfig.cmake"
+        set(_yumenode_spirv_inc "${ANDROID_NDK}/sources/third_party/shaderc/third_party/spirv-tools/external/spirv-headers/include")
+        if (EXISTS "${_yumenode_spirv_inc}/spirv/unified1/spirv.hpp")
+            set(_yumenode_cfg_dir "${CMAKE_BINARY_DIR}/yumenode-spirv-headers")
+            file(MAKE_DIRECTORY "${_yumenode_cfg_dir}")
+            file(WRITE "${_yumenode_cfg_dir}/SPIRV-HeadersConfig.cmake"
 "# generated by Yumenode AI: minimal SPIRV-Headers config (headers come from the NDK)
 set(SPIRV-Headers_FOUND TRUE)
-set(SPIRV-Headers_INCLUDE_DIR \"${_ponko_spirv_inc}\")
-set(SPIRV-Headers_INCLUDE_DIRS \"${_ponko_spirv_inc}\")
+set(SPIRV-Headers_INCLUDE_DIR \"${_yumenode_spirv_inc}\")
+set(SPIRV-Headers_INCLUDE_DIRS \"${_yumenode_spirv_inc}\")
 if(NOT TARGET SPIRV-Headers::SPIRV-Headers)
     add_library(SPIRV-Headers::SPIRV-Headers INTERFACE IMPORTED)
-    set_target_properties(SPIRV-Headers::SPIRV-Headers PROPERTIES INTERFACE_INCLUDE_DIRECTORIES \"${_ponko_spirv_inc}\")
+    set_target_properties(SPIRV-Headers::SPIRV-Headers PROPERTIES INTERFACE_INCLUDE_DIRECTORIES \"${_yumenode_spirv_inc}\")
 endif()
 ")
-            set(SPIRV-Headers_DIR "${_ponko_cfg_dir}" CACHE PATH "generated minimal SPIRV-Headers config" FORCE)
-            message(STATUS "Yumenode AI: SPIRV-Headers config generated at ${_ponko_cfg_dir}")
+            set(SPIRV-Headers_DIR "${_yumenode_cfg_dir}" CACHE PATH "generated minimal SPIRV-Headers config" FORCE)
+            message(STATUS "Yumenode AI: SPIRV-Headers config generated at ${_yumenode_cfg_dir}")
         else ()
-            message(WARNING "Yumenode AI: SPIRV headers not found in the NDK (${_ponko_spirv_inc}); set SPIRV-Headers_DIR manually")
+            message(WARNING "Yumenode AI: SPIRV headers not found in the NDK (${_yumenode_spirv_inc}); set SPIRV-Headers_DIR manually")
         endif ()
     endif ()
 endif ()
@@ -156,7 +156,7 @@ if(YUMENODE_SO_OUT)
 endif()
 
 # ---------------------------------------------------------------------------
-# JNI 桥 → libponko_sd.so
+# JNI 桥 → libyumenode_sd.so
 # ---------------------------------------------------------------------------
-add_library(ponko_sd SHARED sdcpp_jni.cpp)
-target_link_libraries(ponko_sd PRIVATE stable-diffusion android log)
+add_library(yumenode_sd SHARED sdcpp_jni.cpp)
+target_link_libraries(yumenode_sd PRIVATE stable-diffusion android log)

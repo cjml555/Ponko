@@ -9,7 +9,7 @@
 <string name="s_006">(model returned reasoning only, no answer)</string>
 <string name="s_007">(model returned nothing)</string>
 <string name="s_008">-1 = random each run; set a value to reproduce the same image</string>
-<string name="s_009">2 loading native library (libponko_sd.so)</string>
+<string name="s_009">2 loading native library (libyumenode_sd.so)</string>
 <string name="s_010">4 params: </string>
 <string name="s_011">5 context created OK</string>
 <string name="s_012">5 create failed: new_sd_ctx returned 0</string>

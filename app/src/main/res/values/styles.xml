@@ -11,7 +11,7 @@
         <item name="android:windowLightNavigationBar">true</item>
     </style>
 
-    <!-- 深色主题：只有系统栏与窗口底色不同，界面颜色由 PonkoTheme 控制 -->
+    <!-- 深色主题：只有系统栏与窗口底色不同，界面颜色由 YumenodeTheme 控制 -->
     <style name="AppTheme.Dark" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowBackground">#FF15171C</item>
         <item name="android:statusBarColor">#FF2F6BFF</item>

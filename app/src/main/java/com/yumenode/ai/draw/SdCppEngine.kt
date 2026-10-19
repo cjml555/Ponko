@@ -12,9 +12,9 @@ import com.yumenode.ai.InferConfig
 object SdCppEngine {
 
     init {
-        // 依赖 libc++_shared.so（jniLibs 提供）与 libponko_sd.so（含 sd.cpp + ggml）
+        // 依赖 libc++_shared.so（jniLibs 提供）与 libyumenode_sd.so（含 sd.cpp + ggml）
         System.loadLibrary("c++_shared")
-        System.loadLibrary("ponko_sd")
+        System.loadLibrary("yumenode_sd")
     }
 
     /** 采样器（对应 sd.cpp enum sample_method_t） */

@@ -1,5 +1,5 @@
-// Ponko · (c) 2026 visitor257 · MIT License · github.com/visitor257/Ponko
-// sdcpp_jni.cpp — Ponko 自编 stable-diffusion.cpp 的 JNI 桥
+// Yumenode AI · (c) 2026 visitor257 · MIT License · github.com/visitor257/Yumenode AI
+// sdcpp_jni.cpp — Yumenode AI 自编 stable-diffusion.cpp 的 JNI 桥
 // 目标：把 sd.cpp 的 C API 暴露给 Kotlin（可控线程数 / 采样器 / 调度器 / LoRA / 量化类型 / 取消）
 #include <jni.h>
 #include <android/log.h>
@@ -11,7 +11,7 @@
 
 #include "stable-diffusion.h"
 
-#define TAG "PonkoSd"
+#define TAG "YumenodeSd"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 
@@ -94,20 +94,20 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_litertchat_app_draw_SdCppEngine_nativeInfo(JNIEnv* env, jobject /*thiz*/) {
+Java_com_yumenode_ai_draw_SdCppEngine_nativeInfo(JNIEnv* env, jobject /*thiz*/) {
     std::string info = std::string("sd.cpp ") + sd_version() + " | " + sd_get_system_info();
     return env->NewStringUTF(info.c_str());
 }
 
 // 最近一次 new_sd_ctx 用的完整参数（失败时写进日志文件用）
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_litertchat_app_draw_SdCppEngine_nativeLastParams(JNIEnv* env, jobject /*thiz*/) {
+Java_com_yumenode_ai_draw_SdCppEngine_nativeLastParams(JNIEnv* env, jobject /*thiz*/) {
     return env->NewStringUTF(g_last_dump.c_str());
 }
 
 // nativeListDevices() -> "name\tdescription\n..."（ggml 后端设备清单；没有设备时返回空串）
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_litertchat_app_draw_SdCppEngine_nativeListDevices(JNIEnv* env, jobject /*thiz*/) {
+Java_com_yumenode_ai_draw_SdCppEngine_nativeListDevices(JNIEnv* env, jobject /*thiz*/) {
     const size_t need = sd_list_devices(nullptr, 0);
     if (need == 0) return env->NewStringUTF("");
     std::vector<char> buf(need + 1, '\0');
@@ -141,7 +141,7 @@ enum SlotIndex {
 // slots：模型槽位路径数组，按 SlotIndex 顺序给槽位文件路径（当前 13 项）；
 // 元素可以为 null / 空串（表示该槽位不填）。传 null = 走旧的两参数路径（单文件 + 可选 VAE）。
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_litertchat_app_draw_SdCppEngine_nativeCreate(
+Java_com_yumenode_ai_draw_SdCppEngine_nativeCreate(
         JNIEnv* env, jobject /*thiz*/,
         jstring modelPath, jstring vaePath, jint nThreads, jint wtype, jboolean flashAttn,
         jstring backend, jobjectArray slots) {
@@ -231,7 +231,7 @@ Java_com_litertchat_app_draw_SdCppEngine_nativeCreate(
 // sd.cpp 会把它按 request 尺寸缩放后编码进 latent，并按 strength(<1) 决定起始噪声步数。
 // initData 为空 → 文生图，strength 忽略。
 extern "C" JNIEXPORT jintArray JNICALL
-Java_com_litertchat_app_draw_SdCppEngine_nativeGenerate(
+Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
         JNIEnv* env, jobject /*thiz*/,
         jlong handle,
         jstring prompt, jstring negative,
@@ -370,7 +370,7 @@ Java_com_litertchat_app_draw_SdCppEngine_nativeGenerate(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_litertchat_app_draw_SdCppEngine_nativeCancel(JNIEnv* /*env*/, jobject /*thiz*/, jlong handle) {
+Java_com_yumenode_ai_draw_SdCppEngine_nativeCancel(JNIEnv* /*env*/, jobject /*thiz*/, jlong handle) {
     SdHandle* h = reinterpret_cast<SdHandle*>(handle);
     if (h == nullptr) return;
     h->cancelled.store(true);
@@ -379,7 +379,7 @@ Java_com_litertchat_app_draw_SdCppEngine_nativeCancel(JNIEnv* /*env*/, jobject /
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_litertchat_app_draw_SdCppEngine_nativeFree(JNIEnv* env, jobject /*thiz*/, jlong handle) {
+Java_com_yumenode_ai_draw_SdCppEngine_nativeFree(JNIEnv* env, jobject /*thiz*/, jlong handle) {
     SdHandle* h = reinterpret_cast<SdHandle*>(handle);
     if (h == nullptr) return;
     if (h->ctx != nullptr) free_sd_ctx(h->ctx);
