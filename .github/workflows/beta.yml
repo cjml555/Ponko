@@ -1,0 +1,113 @@
+name: Beta Build (Push - Create Beta Tag)
+
+permissions:
+  contents: write
+
+env:
+  main_project_module: app
+  playstore_name: ponko
+
+on:
+  push:
+    tags:
+      - 'beta*' # Any tag starting with 'beta' triggers beta build
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version name (e.g., 1.1.0-beta.3)'
+        required: true
+        default: '1.0.0-beta.1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Set version info
+      - name: Set version info
+        id: version
+        run: |
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION_NAME="${{ github.event.inputs.version }}"
+          elif [[ -n "${{ github.ref_name }}" ]]; then
+            VERSION_NAME="${GITHUB_REF#refs/tags/beta}"
+          else
+            VERSION_NAME="0.000-beta.0"
+          fi
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+      - name: Set current date
+        run: echo "date_today=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Set repository name
+        run: echo "repository_name=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
+
+      - name: Set Up JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1.6.0
+        with:
+          ndk-version: r29
+          link-to-sdk: true
+
+      - name: Update version in build.gradle.kts
+        run: |
+          VERSION_NAME="${{ steps.version.outputs.version_name }}"
+          sed -i "s/versionName = \".*\"/versionName = \"$VERSION_NAME\"/" app/build.gradle.kts
+          echo "Updated to version $VERSION_NAME"
+
+      - name: Run tests
+        run: ./gradlew test
+
+      - name: Build Release APK (Beta)
+        run: ./gradlew assembleRelease
+
+      - name: Build App Bundle (Beta)
+        run: ./gradlew bundleRelease
+
+      - name: Upload APK Beta
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - Beta APK
+          path: ${{ env.main_project_module }}/build/outputs/apk/release/*.apk
+
+      - name: Upload AAB Beta
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }} - Beta AAB
+          path: ${{ env.main_project_module }}/build/outputs/bundle/release/*.aab
+
+      - name: List build outputs
+        run: |
+          ls -la ${{ env.main_project_module }}/build/outputs/apk/release/ 2>/dev/null || echo "No APK release files"
+          ls -la ${{ env.main_project_module }}/build/outputs/bundle/release/ 2>/dev/null || echo "No AAB files"
+
+      # Commit version update if from tag
+      - name: Commit version update
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          git config user.name '${{ github.actor }}'
+          git config user.email '${{ github.actor }}@users.noreply.github.com'
+          git add app/build.gradle.kts
+          git commit -m "build: bump version to ${{ steps.version.outputs.version_name }} [skip ci]" || echo "No changes to commit"
+
+      # Create GitHub Release
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Beta ${{ steps.version.outputs.version_name }}
+          tag_name: beta${{ steps.version.outputs.version_name }}
+          files: |
+            ${{ env.main_project_module }}/build/outputs/apk/release/*.apk
+            ${{ env.main_project_module }}/build/outputs/bundle/release/*.aab

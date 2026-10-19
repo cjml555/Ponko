@@ -1,0 +1,49 @@
+name: CI Build (Debug)
+
+permissions:
+  contents: write
+
+env:
+  main_project_module: app
+
+on:
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - 'v*'
+      - 'beta*'
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set Up JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1.6.0
+        with:
+          ndk-version: r29
+          link-to-sdk: true
+
+      - name: Run tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK Debug
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: Debug APK - ${{ github.sha }}
+          path: ${{ env.main_project_module }}/build/outputs/apk/debug/*.apk

@@ -1,0 +1,397 @@
+Ponko
+Copyright (c) 2026 visitor257
+
+==========================================================================
+  English
+==========================================================================
+
+--------------------------------------------------------------------------
+Source code
+--------------------------------------------------------------------------
+
+This project's source code is released under the MIT License.
+See the LICENSE file for the full text.
+
+--------------------------------------------------------------------------
+Artwork (NOT covered by the MIT License)
+--------------------------------------------------------------------------
+
+The following artwork is not covered by the MIT License:
+
+  - Application icon: app/src/main/res/mipmap-*, app/src/main/res/drawable-*
+  - Character portrait: app/src/main/res/drawable-nodpi/about_portrait.png
+  - Original drawing: tools/icon/source.png
+
+Copyright in the artwork listed above is owned by the author.
+All rights reserved.
+
+You may use the artwork for non-commercial purposes such as introducing,
+reviewing, or referencing this project, provided that you do not modify it
+and that you credit the source.
+
+You may not use the artwork for any commercial purpose without the author's
+prior written permission. To obtain a commercial license, please contact the
+author through the project repository.
+
+--------------------------------------------------------------------------
+Name
+--------------------------------------------------------------------------
+
+"Ponko" is the name of this project. All rights in the name are reserved by
+the author. No trademark registration has been filed for the name.
+
+--------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------
+
+This project includes or links against the following third-party open-source
+components. Copyright in each component is owned by its respective authors,
+and each is distributed under its own license. Full license texts are
+available in the corresponding source directories or license files.
+
+A. Bundled source code (distributed with this repository, under app/src/main/cpp/)
+
+  - stable-diffusion.cpp
+      License: MIT License
+      Copyright: Copyright (c) 2023 leejet
+      Source: https://github.com/leejet/stable-diffusion.cpp
+      License text: app/src/main/cpp/sd/LICENSE
+      Note: To reduce size, this project trims the parts of its source code
+            that are not used here (only the CLIP tokenizer vocabulary is
+            kept) and applies minor adaptations for the Android/CMake build.
+            The trimmed and adapted source is still distributed under the
+            MIT License.
+
+  - ggml
+      License: MIT License
+      Copyright: Copyright (c) 2023-2024 The ggml authors
+      Source: https://github.com/ggerganov/ggml
+      License text: app/src/main/cpp/sd/ggml/LICENSE
+      Note: The vendored ggml tree also carries files contributed by other
+            projects, each under a permissive license:
+              - Intel Corporation / Codeplay Software Ltd. (ggml-sycl,
+                ggml-openvino): MIT License, and Apache License 2.0 with
+                LLVM Exceptions for the parts derived from the LLVM Project
+              - Arm Limited - KleidiAI (ggml-cpu/kleidiai): MIT License
+              - Mozilla Foundation - llamafile sgemm
+                (ggml-cpu/llamafile/sgemm.cpp): MIT License
+              - nlohmann/json (thirdparty/json.hpp) embeds SIMDe
+                (MIT, Evan Nemerson) and Abseil (Apache License 2.0)
+            The GPU backends (CUDA / Metal / OpenCL / SYCL / OpenVINO) are kept
+            as source only and are not compiled into the app.
+
+  - Vulkan-Hpp (vulkan.hpp) and Vulkan-Headers (vulkan.h, vk_video/*)
+      License: Apache License 2.0 OR MIT (SPDX: Apache-2.0 OR MIT)
+      Copyright: Copyright 2015-2024 The Khronos Group Inc.
+      Source: https://github.com/KhronosGroup/Vulkan-Hpp ,
+              https://github.com/KhronosGroup/Vulkan-Headers
+      License text: licenses/apache-2.0.txt
+      Note: Header-only Vulkan C++ bindings, vendored at
+            app/src/main/cpp/thirdparty/include/ (version 1.3.275, matching the
+            NDK's Vulkan headers). Only needed to compile the optional Vulkan
+            backend for drawing.
+
+  - Third-party files bundled with stable-diffusion.cpp (thirdparty/)
+      - stb_image.h / stb_image_write.h / stb_image_resize.h: Public Domain or MIT
+      - json.hpp (JSON for Modern C++): MIT License
+      - httplib.h (cpp-httplib): MIT License
+      - miniz.h: MIT License
+      - zip.c / zip.h (kuba--/zip): MIT License
+        License text: licenses/zip-LICENSE.txt
+      - darts_clone: BSD 3-Clause License
+        License text: app/src/main/cpp/sd/thirdparty/LICENSE.darts_clone.txt
+
+B. Binary dependencies (fetched by Gradle from trusted repositories; not
+   distributed with this repository)
+
+  - LiteRT-LM (com.google.ai.edge.litertlm:litertlm-android)
+      License: Apache License 2.0     Copyright: Google LLC
+  - Android bindings for llama.cpp (net.ladenthin:llama-android)
+      License: MIT License            Copyright: Copyright (c) 2023-2024 Georgi Gerganov
+  - Markwon (io.noties.markwon:*)
+      License: Apache License 2.0     Copyright: Copyright (c) 2017 Noties
+  - Kotlin / kotlinx.coroutines (org.jetbrains.kotlinx:*)
+      License: Apache License 2.0     Copyright: Copyright (c) JetBrains s.r.o.
+  - AndroidX / Material components
+      License: Apache License 2.0     Copyright: Copyright (c) The Android Open Source Project
+  - ONNX Runtime (com.microsoft.onnxruntime:onnxruntime-android)
+      License: MIT License            Copyright: Copyright (c) Microsoft Corporation
+      License text: licenses/onnxruntime-LICENSE.txt
+      Note: Used for on-device image tagging (Tagger). The runtime bundles
+            additional third-party components; their notices are reproduced
+            in licenses/onnxruntime-ThirdPartyNotices.txt.
+
+  - Transitive dependencies pulled in by the libraries above (bundled into
+    the APK, not listed in build.gradle.kts):
+
+      - commonmark-java (com.atlassian.commonmark:commonmark, via Markwon)
+          License: BSD 2-Clause        Copyright: Copyright (c) 2015-2019 Atlassian and others
+      - Jackson (com.fasterxml.jackson.core:*, via the llama.cpp binding)
+          License: Apache License 2.0  Copyright: Copyright (c) FasterXML, LLC
+      - Gson (com.google.code.gson:gson, via LiteRT-LM)
+          License: Apache License 2.0  Copyright: Copyright (c) Google Inc.
+      - SLF4J API (org.slf4j:slf4j-api, via the llama.cpp binding)
+          License: MIT License         Copyright: Copyright (c) 2004-2023 QOS.ch
+      - FastDoubleParser / Schubfach (bundled inside Jackson)
+          License: MIT License / Boost Software License 1.0
+          Copyright: Copyright (c) 2024 Werner Randelshofer, Switzerland;
+                     Copyright (c) Daniel Lemire; Copyright 2018-2020 Raffaello Giulietti
+          License text: shipped inside the APK under META-INF/FastDoubleParser-LICENSE,
+                        META-INF/FastDoubleParser-ThirdParty-LICENSE and META-INF/Schubfach-LICENSE
+      - kotlin-reflect (org.jetbrains.kotlin:kotlin-reflect)
+          License: Apache License 2.0  Copyright: Copyright (c) JetBrains s.r.o.
+      - Annotation-only libraries (jspecify, checker-qual, error_prone_annotations,
+        org.jetbrains:annotations)
+          License: Apache License 2.0 / MIT License
+          Note: annotations only, no runtime logic
+
+C. NDK runtime libraries distributed with this repository
+   (app/src/main/jniLibs/arm64-v8a/)
+
+  - libomp.so (LLVM OpenMP runtime)
+  - libc++_shared.so (LLVM libc++ runtime)
+      License: Apache License 2.0 with LLVM Exceptions
+      Copyright: Copyright (c) The LLVM Project
+      Note: Taken from the Android NDK (android-ndk-r27). The build output of
+            stable-diffusion.cpp requires the OpenMP runtime. Distribution
+            follows the terms of the LLVM license.
+
+D. Components statically linked into third-party native libraries
+   (shipped inside the .so files in the APK)
+
+  liblitertlm_jni.so (LiteRT-LM) bundles, among others:
+      - TensorFlow Lite / LiteRT   Apache License 2.0   Copyright (c) Google LLC
+      - XNNPACK                    BSD 3-Clause        Copyright (c) Google LLC
+            License text: licenses/XNNPACK-LICENSE.txt
+      - sentencepiece              Apache License 2.0   Copyright (c) Google LLC
+      - HuggingFace tokenizers     Apache License 2.0   Copyright (c) Hugging Face
+      - re2                        BSD 3-Clause        Copyright (c) The RE2 Authors
+            License text: licenses/re2-LICENSE.txt
+      - Abseil                     Apache License 2.0   Copyright (c) The Abseil Authors
+      - cpuinfo                    BSD 2-Clause        Copyright (c) Google LLC,
+                                                          Facebook Inc., Georgia Institute of Technology
+            License text: licenses/cpuinfo-LICENSE.txt
+      - protobuf                   BSD 3-Clause        Copyright (c) Google Inc.
+            License text: licenses/protobuf-LICENSE.txt
+      - flatbuffers                Apache License 2.0   Copyright (c) Google LLC
+      - zlib                       zlib License        Copyright (c) Jean-loup Gailly and Mark Adler
+            License text: licenses/zlib-LICENSE.txt
+
+  libonnxruntime.so (ONNX Runtime) bundles, among others, XNNPACK,
+  protobuf, ONNX (Apache License 2.0), Abseil, flatbuffers, re2 and cpuinfo.
+      Full notices: licenses/onnxruntime-ThirdPartyNotices.txt
+
+  The native libraries of stable-diffusion.cpp and of the llama.cpp binding
+  bundle ggml, stb, miniz, json.hpp, httplib, zip and darts_clone (see section A).
+
+  The Apache License 2.0 full text is available at licenses/apache-2.0.txt.
+
+E. Build tooling distributed with this repository (not part of the app)
+
+  - Gradle Wrapper (gradle/wrapper/gradle-wrapper.jar, gradlew, gradlew.bat)
+      License: Apache License 2.0     Copyright: Copyright (c) Gradle, Inc.
+      Source: https://github.com/gradle/gradle
+      Note: Only the Wrapper is committed, so the project builds with the
+            exact Gradle version (9.7.1). It is a build-time tool and is not
+            included in the APK.
+
+--------------------------------------------------------------------------
+Note
+--------------------------------------------------------------------------
+
+This project does not include any Stable Diffusion model weights.
+Drawing models (.gguf), chat models (.litertlm / .gguf) and LoRA files are
+obtained by the user and loaded at runtime; their licensing and terms of use
+are governed by their respective distributors.
+
+The same applies to the tagging/Tagger assets: the ONNX tagger model (.onnx)
+and its tag list (selected_tags.csv) are imported by the user and are not
+distributed with this project.
+
+
+==========================================================================
+  中文
+==========================================================================
+
+--------------------------------------------------------------------------
+源代码
+--------------------------------------------------------------------------
+
+本项目的源代码采用 MIT 许可发布，完整条款见 LICENSE 文件。
+
+--------------------------------------------------------------------------
+美术资源（不适用 MIT 许可）
+--------------------------------------------------------------------------
+
+以下美术资源不在 MIT 许可范围内：
+
+  - 应用图标：app/src/main/res/mipmap-*、app/src/main/res/drawable-*
+  - 角色立绘：app/src/main/res/drawable-nodpi/about_portrait.png
+  - 原始画稿：tools/icon/source.png
+
+上述美术资源的著作权归作者所有，保留所有权利（All rights reserved）。
+
+允许在不作修改、注明出处的前提下，将上述美术资源用于介绍、评测、
+引用本项目的非商业场合。
+
+未经作者书面许可，不得将上述美术资源用于任何商业用途。需要商用
+授权请通过项目仓库的联系方式与作者联系。
+
+--------------------------------------------------------------------------
+名称
+--------------------------------------------------------------------------
+
+「Ponko」为本项目名称，相关权利归作者所有；作者目前未就该名称申请商标注册。
+
+--------------------------------------------------------------------------
+第三方组件
+--------------------------------------------------------------------------
+
+本项目包含或链接以下第三方开源组件。各组件的著作权归其各自作者所有，
+按各自许可证分发。完整许可证文本见对应的源码目录或许可证文件。
+
+A. 内置源码（随本仓库分发，源码位于 app/src/main/cpp/）
+
+  - stable-diffusion.cpp
+      许可证：MIT License
+      著作权：Copyright (c) 2023 leejet
+      来源：https://github.com/leejet/stable-diffusion.cpp
+      许可证文本：app/src/main/cpp/sd/LICENSE
+      说明：为减小体积，本项目对其源码做了裁剪，剔除了本项目未使用的
+            分词器词表（仅保留 CLIP）；同时按 Android/CMake 构建需要做了
+            少量适配。裁剪与适配后的源码仍按 MIT 许可分发。
+
+  - ggml
+      许可证：MIT License
+      著作权：Copyright (c) 2023-2024 The ggml authors
+      来源：https://github.com/ggerganov/ggml
+      许可证文本：app/src/main/cpp/sd/ggml/LICENSE
+      说明：裁剪后的 ggml 目录里还包含其他项目贡献的文件，均为宽松许可：
+            - Intel Corporation / Codeplay Software Ltd.（ggml-sycl、
+              ggml-openvino）：MIT License；其中源自 LLVM Project 的部分为
+              Apache License 2.0 with LLVM Exceptions
+            - Arm Limited - KleidiAI（ggml-cpu/kleidiai）：MIT License
+            - Mozilla Foundation - llamafile sgemm
+              （ggml-cpu/llamafile/sgemm.cpp）：MIT License
+            - nlohmann/json（thirdparty/json.hpp）内嵌 SIMDe
+              （MIT，Evan Nemerson）与 Abseil（Apache License 2.0）
+            各 GPU 后端（CUDA / Metal / OpenCL / SYCL / OpenVINO）仅保留源码，
+            不参与 App 编译。
+
+  - Vulkan-Hpp（vulkan.hpp）与 Vulkan-Headers（vulkan.h、vk_video/*）
+      许可证：Apache License 2.0 OR MIT（SPDX：Apache-2.0 OR MIT）
+      著作权：Copyright 2015-2024 The Khronos Group Inc.
+      来源：https://github.com/KhronosGroup/Vulkan-Hpp ，
+            https://github.com/KhronosGroup/Vulkan-Headers
+      许可证文本：licenses/apache-2.0.txt
+      说明：仅头文件的 Vulkan C++ 绑定，随仓库分发在
+            app/src/main/cpp/thirdparty/include/（版本 1.3.275，与 NDK 的
+            Vulkan 头版本对应）。只有编译可选的绘图 Vulkan 后端时需要。
+
+  - stable-diffusion.cpp 附带的第三方文件（thirdparty/）
+      - stb_image.h / stb_image_write.h：公有领域（Public Domain）或 MIT
+      - json.hpp（JSON for Modern C++）：MIT License
+      - httplib.h（cpp-httplib）：MIT License
+      - miniz.h：MIT License
+      - zip.c / zip.h（kuba--/zip）：MIT License
+        许可证文本：licenses/zip-LICENSE.txt
+      - darts_clone：BSD 3-Clause License
+        许可证文本：app/src/main/cpp/sd/thirdparty/LICENSE.darts_clone.txt
+
+B. 二进制依赖（由 Gradle 从可信仓库拉取，不随本仓库分发）
+
+  - LiteRT-LM（com.google.ai.edge.litertlm:litertlm-android）
+      许可证：Apache License 2.0      著作权：Google LLC
+  - llama.cpp 的 Android 绑定（net.ladenthin:llama-android）
+      许可证：MIT License             著作权：Copyright (c) 2023-2024 Georgi Gerganov
+  - Markwon（io.noties.markwon:*）
+      许可证：Apache License 2.0      著作权：Copyright (c) 2017 Noties
+  - Kotlin / kotlinx.coroutines（org.jetbrains.kotlinx:*）
+      许可证：Apache License 2.0      著作权：Copyright (c) JetBrains s.r.o.
+  - AndroidX / Material 组件
+      许可证：Apache License 2.0      著作权：Copyright (c) The Android Open Source Project
+  - ONNX Runtime（com.microsoft.onnxruntime:onnxruntime-android）
+      许可证：MIT License           著作权：Copyright (c) Microsoft Corporation
+      许可证文本：licenses/onnxruntime-LICENSE.txt
+      说明：用于本机图像打标（Tagger）。该运行时另自带若干第三方组件，
+            其声明见 licenses/onnxruntime-ThirdPartyNotices.txt。
+
+  - 传递依赖（由上面的库自动引入，随 APK 打包，未写在 build.gradle.kts 里）：
+
+      - commonmark-java（com.atlassian.commonmark:commonmark，Markwon 引入）
+          许可证：BSD 2-Clause        著作权：Copyright (c) 2015-2019 Atlassian and others
+      - Jackson（com.fasterxml.jackson.core:*，llama.cpp 绑定引入）
+          许可证：Apache License 2.0  著作权：Copyright (c) FasterXML, LLC
+      - Gson（com.google.code.gson:gson，LiteRT-LM 引入）
+          许可证：Apache License 2.0  著作权：Copyright (c) Google Inc.
+      - SLF4J API（org.slf4j:slf4j-api，llama.cpp 绑定引入）
+          许可证：MIT License         著作权：Copyright (c) 2004-2023 QOS.ch
+      - FastDoubleParser / Schubfach（打包在 Jackson 内）
+          许可证：MIT License / Boost Software License 1.0
+          著作权：Copyright (c) 2024 Werner Randelshofer, Switzerland；
+                  Copyright (c) Daniel Lemire；Copyright 2018-2020 Raffaello Giulietti
+          许可证文本：随 APK 打包，位于 META-INF/FastDoubleParser-LICENSE、
+                     META-INF/FastDoubleParser-ThirdParty-LICENSE 与 META-INF/Schubfach-LICENSE
+      - kotlin-reflect（org.jetbrains.kotlin:kotlin-reflect）
+          许可证：Apache License 2.0  著作权：Copyright (c) JetBrains s.r.o.
+      - 仅注解类库（jspecify、checker-qual、error_prone_annotations、
+        org.jetbrains:annotations）
+          许可证：Apache License 2.0 / MIT License
+          说明：仅含注解，无运行时代码
+
+C. 随仓库分发的 NDK 运行时库（app/src/main/jniLibs/arm64-v8a/）
+
+  - libomp.so（LLVM OpenMP 运行时）
+  - libc++_shared.so（LLVM libc++ 运行时）
+      许可证：Apache License 2.0 with LLVM Exceptions
+      著作权：Copyright (c) The LLVM Project
+      说明：来自 Android NDK（android-ndk-r27），stable-diffusion.cpp 的
+            编译产物依赖 OpenMP 运行时。分发遵循 LLVM 许可证条款。
+
+D. 静态链入第三方原生库的组件（打包在 APK 的 .so 里）
+
+  liblitertlm_jni.so（LiteRT-LM）内含以下组件（仅列主要项）：
+      - TensorFlow Lite / LiteRT   Apache License 2.0  著作权：Google LLC
+      - XNNPACK                    BSD 3-Clause       著作权：Google LLC
+            许可证文本：licenses/XNNPACK-LICENSE.txt
+      - sentencepiece              Apache License 2.0  著作权：Google LLC
+      - HuggingFace tokenizers     Apache License 2.0  著作权：Hugging Face
+      - re2                        BSD 3-Clause       著作权：The RE2 Authors
+            许可证文本：licenses/re2-LICENSE.txt
+      - Abseil                     Apache License 2.0  著作权：The Abseil Authors
+      - cpuinfo                    BSD 2-Clause       著作权：Google LLC、
+                                                         Facebook Inc.、Georgia Institute of Technology
+            许可证文本：licenses/cpuinfo-LICENSE.txt
+      - protobuf                   BSD 3-Clause       著作权：Google Inc.
+            许可证文本：licenses/protobuf-LICENSE.txt
+      - flatbuffers                Apache License 2.0  著作权：Google LLC
+      - zlib                       zlib License       著作权：Jean-loup Gailly and Mark Adler
+            许可证文本：licenses/zlib-LICENSE.txt
+
+  libonnxruntime.so（ONNX Runtime）内含 XNNPACK、protobuf、ONNX（Apache License 2.0）、
+  Abseil、flatbuffers、re2、cpuinfo 等。
+      完整声明：licenses/onnxruntime-ThirdPartyNotices.txt
+
+  stable-diffusion.cpp 与 llama.cpp 绑定的原生库内含 ggml、stb、miniz、
+  json.hpp、httplib、zip、darts_clone（见 A 段）。
+
+  Apache License 2.0 全文见 licenses/apache-2.0.txt。
+
+E. 随本仓库分发的构建工具（不属于 App 本体）
+
+  - Gradle Wrapper（gradle/wrapper/gradle-wrapper.jar、gradlew、gradlew.bat）
+      许可证：Apache License 2.0  著作权：Copyright (c) Gradle, Inc.
+      来源：https://github.com/gradle/gradle
+      说明：仓库内只提交 Wrapper，以保证用固定版本的 Gradle（9.7.1）构建。
+            它只是构建期工具，不会打进 APK。
+
+--------------------------------------------------------------------------
+说明
+--------------------------------------------------------------------------
+
+本项目不包含任何 Stable Diffusion 模型权重文件。绘图模型（.gguf）、
+对话模型（.litertlm / .gguf）与 LoRA 均由使用者自行获取并在运行时载入，
+其许可与使用条款以各自发布方为准。
+
+打标（Tagger）用的资产同样如此：ONNX 打标模型（.onnx）与其标签表
+（selected_tags.csv）由使用者自行导入，不随本项目分发。
