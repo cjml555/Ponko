@@ -54,7 +54,8 @@ class VisionManager(
         }
         // Nota: el ActivityResult se maneja en MainActivity.onActivityResult
         // con REQ_PICK_MMPROJ. Aquí solo construimos el Intent.
-        (ctx as? android.app.Activity)?.startActivityForResult(i, MainActivity.REQ_PICK_MMPROJ)
+        // Decoupled from MainActivity: request code comes from the shared Constants.
+        (ctx as? android.app.Activity)?.startActivityForResult(i, REQ_PICK_MMPROJ)
     }
 
     // ── importación ──

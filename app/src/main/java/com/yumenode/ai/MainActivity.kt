@@ -106,30 +106,6 @@ import com.yumenode.ai.tagRolesGguf
  */
 class MainActivity : Activity(), SettingsHost {
 
-    companion object {
-        private const val REQ_PICK_MODEL = 1001
-        private const val REQ_PICK_DRAW_MODEL = 1002
-        private const val REQ_PICK_LORA = 1003
-        private const val REQ_TAGGER_ONNX = 1004
-        private const val REQ_TAGGER_CSV = 1005
-        private const val REQ_TAKE_PHOTO = 1006
-        // REQ_PICK_CHAT_IMAGE and REQ_PICK_FILE now in AttachmentHandler
-        const val REQ_PICK_MMPROJ = 1008
-        private const val REQ_PERM_STORAGE = 1009
-        /** Android 13+ 常驻通知权限（对话 API 用） */
-        private const val REQ_NOTIF = 1020
-
-        // ---- 关于页两个折叠分区的展开状态（存盘：重启后保持用户上次的选择）----
-        private const val KEY_UI_SETTINGS_OPEN = "uiSettingsOpen"
-        private const val KEY_UI_ABOUT_OPEN = "uiAboutOpen"
-        /** 一轮对话里最多让打标模型「看图」几次（agent 循环上限） */
-        private const val MAX_TAG_ROUNDS = 2
-        // MAX_ATTACH, MAX_FILES, MAX_FILE_BYTES now in AttachmentHandler
-
-        // 思考模式开关（全局偏好，与模型无关）
-        private const val KEY_CHAT_THINK = "chatThink"
-    }
-
     // ---- palette ----
     // ================= 主题 =================
     // 所有界面颜色都来自 pal（见 YumenodeTheme）；这里只做取名，方便沿用 C_XXX。

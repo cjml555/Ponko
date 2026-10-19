@@ -50,11 +50,6 @@ class SettingsPage(private val host: SettingsHost) {
     private val C_FIELD_BG get() = pal.fieldBg
     private val C_PRIMARY get() = pal.primary
 
-    private companion object {
-        const val KEY_UI_SETTINGS_OPEN = "uiSettingsOpen"
-        const val KEY_UI_ABOUT_OPEN = "uiAboutOpen"
-    }
-
     fun build(): View = with(ctx) {
 
         val sv = ScrollView(ctx).apply {

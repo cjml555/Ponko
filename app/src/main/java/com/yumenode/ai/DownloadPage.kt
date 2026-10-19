@@ -33,8 +33,6 @@ class DownloadPage(
     private val pal: YumenodeTheme,
 ) {
 
-    private companion object { const val REQ_NOTIF = 1020 }
-
     private val C_CARD get() = pal.surface
     private val C_PRIMARY get() = pal.primary
     private val C_SUBTEXT get() = pal.subText

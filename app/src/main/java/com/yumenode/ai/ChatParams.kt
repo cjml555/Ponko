@@ -22,9 +22,6 @@ class ChatParams(
 ) {
 
     companion object {
-        // ---- preferencia: modo de pensamiento global ----
-        private const val KEY_CHAT_THINK = "chatThink"
-
         // ---- claves por modelo ----
         const val KEY_CHAT_CTX = "chatCtx"
         const val KEY_CHAT_MAXOUT = "chatMaxOut"
