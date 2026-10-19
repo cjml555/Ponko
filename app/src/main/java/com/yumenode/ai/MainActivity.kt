@@ -126,10 +126,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
     // ---- Manager dependencies ----
     private val crashHandler = CrashHandler(this)
-    private val sessionManager = SessionManager(this)
-    private val attachmentHandler = AttachmentHandler.create(this, this)
+    internal val sessionManager = SessionManager(this)
+    internal val attachmentHandler = AttachmentHandler.create(this, this)
 
-    private val commandScanner = CommandScanner()
+    internal val commandScanner = CommandScanner()
 
     /** Constructores de widgets con el estilo de Yumenode AI. */
     override val ui by lazy { UiWidgets(this) { pal } }
@@ -268,16 +268,16 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         }
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    internal val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    private var engine: Engine? = null
-    private var conversation: Conversation? = null
+    internal var engine: Engine? = null
+    internal var conversation: Conversation? = null
     private var modelPath: String? = null
     /** El modelo cargado admite 'thinking' (heurístico por nombre). El checkbox
      *  de Thinking se oculta cuando el modelo no soporta razonamiento. */
     private var modelSupportsThinking: Boolean = true
     /** Pensamiento efectivo: el usuario lo activa Y el modelo lo admite. */
-    private val thinkingActive: Boolean get() = modelSupportsThinking && thinkCheck.isChecked
+    internal val thinkingActive: Boolean get() = modelSupportsThinking && thinkCheck.isChecked
     private var taggerUi = TaggerUi(
         this,
         scope,
@@ -296,7 +296,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private var visionManager: VisionManager? = null
 
     /** Construcción de parámetros de inferencia (gguf / litertlm) */
-    private val inferenceParamsBuilder: InferenceParamsBuilder by lazy {
+    internal val inferenceParamsBuilder: InferenceParamsBuilder by lazy {
         InferenceParamsBuilder(
             chatParams = chatParams,
             drawToolPrompt = drawToolPrompt,
@@ -310,7 +310,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     }
 
     // ---- 对话参数（模型页 · 对话模型）----
-    private val chatParams = ChatParams(this) { modelPath }
+    internal val chatParams = ChatParams(this) { modelPath }
     /** 回填参数到输入框时临时屏蔽 TextWatcher，免得多字段被互相覆盖 */
     private val chatParamsOwnerTv: TextView? get() = modelsPage.chatParamsOwnerTv
     private val chatCtxEdit: EditText? get() = modelsPage.chatCtxEdit
@@ -321,10 +321,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private val chatRepEdit: EditText? get() = modelsPage.chatRepEdit
     private val chatBudgetEdit: EditText? get() = modelsPage.chatBudgetEdit
     private val chatSeedEdit: EditText? get() = modelsPage.chatSeedEdit
-    private var busy = false
+    internal var busy = false
 
     /** Chat 消息处理：构造文件块、编码文件、估算 token、准备发送 */
-    private val chatManager = ChatManager(this, attachmentHandler)
+    internal val chatManager = ChatManager(this, attachmentHandler)
 
     /** 当前加载的 .litertlm 模型是否支持图像输入（读模型自带 Capabilities，失败按不支持处理）。 */
     /** true = el modelo cargado soporta entrada visual (delegado a VisionManager) */
@@ -337,7 +337,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         get() = visionManager?.mmprojPath
         set(v) { visionManager?.mmprojPath = v }
     /** 「借打标看图」时工具结果用哪个角色候选回传（0=首选，试错后记住可用的那个） */
-    private var tagReturnIdx = 0
+    internal var tagReturnIdx = 0
     /** 输入栏「＋」附件按钮；待发送图片的预览条与缩略图 */
     private lateinit var attachButton: TextView
     private lateinit var attachPreviewStrip: HorizontalScrollView
@@ -364,22 +364,22 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
     /** 当前处于绘图模式：对话页的输入会被当作正面提示词去生成图片 */
     /** 语言模型可用的绘图命令说明（仅当绘图模型与语言模型同时就绪时注入）。 */
-    private val drawToolPrompt = CommandScanner.DRAW_TOOL_PROMPT
+    internal val drawToolPrompt = CommandScanner.DRAW_TOOL_PROMPT
 
     /** 语言模型与绘图模型同时就绪 → 语言模型可以用 <draw> 命令调绘图模型。 */
-    private val canDrawFromChat: Boolean
+    internal val canDrawFromChat: Boolean
         get() = drawPage?.isReady() == true && (engine != null || llamaModel != null)
 
     /** 从回答里取出 <draw>…</draw> 命令：返回提示词与命中位置（不改内容，由调用方替换） */
-    private fun scanDrawCommand(answer: String, thought: String): DrawHit? =
+    internal fun scanDrawCommand(answer: String, thought: String): DrawHit? =
             commandScanner.scanDrawCommand(answer, thought, canDrawFromChat)
 
         /** 语言模型看不见图、但打标模型已加载 → 可以用 <tag> 命令让系统去识别图片。 */
-        private val canTagFromChat: Boolean
+        internal val canTagFromChat: Boolean
             get() = drawPage?.taggerLoaded() == true && (engine != null || llamaModel != null) && !visionOk
 
         /** 这一轮带图、模型自己看不见、且还没识别过 → 本轮就把打标命令说明给模型 */
-        private fun canTagTurn(t: QaTurn?): Boolean =
+        internal fun canTagTurn(t: QaTurn?): Boolean =
             canTagFromChat && t?.userImage != null
 
         /** 看不见图的模型：告诉它可以用 <tag> 命令让打标模型去看用户发的图。 */
@@ -393,7 +393,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         """.trimIndent()
 
         /** 看不见图的模型：本轮带图时给它的提示（先告知「带了图」，再给工具命令格式） */
-        private fun tagHint(t: QaTurn?): String {
+        internal fun tagHint(t: QaTurn?): String {
             val n = ChatSendLogic.countImages(t?.userImage)
             return getString(R.string.s_329, n) + "\n" + tagToolPrompt
         }
@@ -401,11 +401,11 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         /** 不做工具调用时，把回答里可能残留的 <tag …></tag> 命令抹掉（别把命令原文当正文显示给用户） */
 
         /** 从回答里取出 <tag …></tag> 命令：返回参数与命中位置（不改内容，由调用方替换） */
-        private fun scanTagCommand(answer: String, thought: String): TagHit? =
+        internal fun scanTagCommand(answer: String, thought: String): TagHit? =
             commandScanner.scanTagCommand(answer, thought, canTagFromChat)
 
     /** 把这一轮用户发的图交给打标模型识别：返回标签文本（多张图各一行），失败抛异常 */
-    private fun runTaggerOnImages(names: List<String>, req: TagReq): String {
+    internal fun runTaggerOnImages(names: List<String>, req: TagReq): String {
         val rgbOrder = drawPage?.taggerRgbOrder() == true
         val sb = StringBuilder()
         for ((i, n) in names.withIndex()) {
@@ -426,267 +426,17 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
      * displayPrefix、thoughtPrefix 是前面几轮已经落在气泡里的内容，这样工具调用可以
      * 在同一个气泡里接着往下写，而不是把整轮重来一遍。
      */
-    private suspend fun runRound(
-        turn: QaTurn,
-        ai: AiArea,
-        gguf: Boolean,
-        jpegs: List<ByteArray>,
-        overText: String,
-        displayPrefix: String,
-        thoughtPrefix: String,
-        toolReturn: ToolReturn?,
-        dropLastForBudget: Boolean,
-        hideStream: Boolean,
-    ): RoundOut {
-        val answerBuf = StringBuilder()
-        val thoughtBuf = StringBuilder()
-        var lastRender = 0L
 
-        fun renderAnswer() {
-            // 第一轮可能先藏着不显示（等确认要不要调工具），见 hideStream
-            if (hideStream) return
-            val now = SystemClock.uptimeMillis()
-            if (now - lastRender < 120) return
-            lastRender = now
-            val md = displayPrefix + answerBuf
-            if (md.isNotEmpty()) {
-                // 流式重渲染可能把焦点从输入框抢走：用户正在打字时把焦点还回去
-                val hadFocus = inputEdit.hasFocus()
-                markwonStream.setMarkdown(ai.answer, md)
-                if (hadFocus && !inputEdit.hasFocus()) inputEdit.requestFocus()
-            }
-        }
-
-        fun renderThought() {
-            val now = SystemClock.uptimeMillis()
-            if (now - lastRender < 90) return
-            val hadFocus = inputEdit.hasFocus()
-            ai.thoughtBody.text = thoughtPrefix + thoughtBuf
-            ai.thoughtHeader.text = if (ai.thoughtBody.visibility == View.VISIBLE)
-                getString(R.string.s_206) else getString(R.string.s_205)
-            if (hadFocus && !inputEdit.hasFocus()) inputEdit.requestFocus()
-        }
-
-        // 「工具返回」轮：模板/引擎可能不认 system、tool 角色（会直接抛错），
-        // 那就换个候选角色重发一次；一但试出能用的就记住，后面不再试错。
-        var attempt = if (toolReturn == null) 0 else tagReturnIdx.coerceIn(0, 2)
-        var genStart = 0L
-        lastTpsFoot = null
-        while (true) {
-            answerBuf.setLength(0)
-            thoughtBuf.setLength(0)
-            try {
-                genStart = SystemClock.uptimeMillis()
-                if (gguf) {
-                    val lm = llamaModel ?: return RoundOut("", "")
-                    val extra: List<net.ladenthin.llama.value.Pair<String, String>> = if (toolReturn == null) {
-                        emptyList()
-                    } else {
-                        listOf(
-                            net.ladenthin.llama.value.Pair("assistant", toolReturn.modelText),
-                            net.ladenthin.llama.value.Pair(tagRolesGguf[attempt], toolReturn.text),
-                        )
-                    }
-                    // generateChat 会套用模型自带的对话模板；cache_prompt=true + 固定 slot
-                    // 让 llama.cpp 复用上一轮已算好的 KV 前缀，长对话不再重复 prefill。
-                    // 本回合带图且模型能看图 → 走多模态消息（ContentPart）；否则沿用纯文字路径
-                    val params = if (visionOk && jpegs.isNotEmpty()) {
-                        inferenceParamsBuilder.buildMultimodalParams(current, jpegs, extra)
-                    } else {
-                        inferenceParamsBuilder.buildInferenceParams(current, extra)
-                    }
-
-                    // GGUF 模型的思考内容混在正文流里（<|channel>thought…<channel|> 或 …），
-                    // 用状态机把两路分开：思考进折叠区，正文走 Markdown 渲染。
-                    fun onThoughtDelta(d: String) {
-                        if (d.isEmpty()) return
-                        thoughtBuf.append(d)
-                        turn.thought = thoughtPrefix + thoughtBuf
-                        if (ai.thoughtBox.visibility != View.VISIBLE) ai.thoughtBox.visibility = View.VISIBLE
-                        renderThought()
-                    }
-
-                    fun onAnswerDelta(d: String) {
-                        if (d.isEmpty()) return
-                        answerBuf.append(d)
-                        turn.answer = displayPrefix + answerBuf
-                        renderAnswer()
-                    }
-
-                    // 开了思考模式就默认从思考区开始：Gemma 这类模型的 `<|channel>thought`
-                    // 前缀是写在 prompt 模板里的，不会出现在输出流中，只能靠结束标记分界。
-                    val splitter = ReasoningSplitter(
-                        ::onThoughtDelta,
-                        ::onAnswerDelta,
-                        assumeThinking = thinkingActive,
-                    )
-
-                    val flow = channelFlow {
-                        withContext(Dispatchers.IO) {
-                            val iterable = lm.generateChat(params)
-                            val it = iterable.iterator()
-                            ggufIterator = it
-                            try {
-                                // 用户中断后 native 迭代器会抛异常（如 task not found），
-                                // 此时正常收尾，不当成错误
-                                val next = {
-                                    try {
-                                        if (it.hasNext()) it.next() else null
-                                    } catch (e: Throwable) {
-                                        if (!stopRequested) throw e
-                                        null
-                                    }
-                                }
-                                while (true) {
-                                    val piece = next() ?: break
-                                    if (piece.text.isNotEmpty()) send(piece.text)
-                                }
-                            } finally {
-                                runCatching { it.close() }
-                                ggufIterator = null
-                            }
-                        }
-                    }
-                    flow.collect { piece ->
-                        splitter.feed(piece)
-                        chatScrollManager?.scrollToBottom()
-                    }
-                    splitter.finish()
-                    renderThought()
-                } else {
-                    // Flow emits INCREMENTAL chunks (not snapshots): accumulate.
-                    // Reasoning text arrives on channels["thought"], answer text in contents.
-                    val items = ArrayList<Content>()
-                    if (overText.isNotEmpty()) items.add(Content.Text(overText))
-                    // 模型自己看不见图时不要把图片塞给它（图片只交给打标模型用）
-                    if (visionOk) jpegs.forEach { items.add(Content.ImageBytes(it)) }
-                    // LiteRT 的会话是【增量累积】的：历史 + 本轮一旦超过模型上下文（4096），
-                    // native 直接抛 "Input token ids too long"，这一轮就废了。
-                    // 所以发送前自己估一把：超预算就重建会话——configFor 会按预算裁掉最老的对话。
-                    if (chatParams.dirty ||
-                        chatManager.estimateConversationTokens(
-                            current, overText, dropLast = dropLastForBudget, 
-                            canDrawFromChat = canDrawFromChat, 
-                            drawToolPrompt = drawToolPrompt
-                        ) > chatParams.inputTokenBudget()
-                    ) {
-                        rebuildConversation(silent = true, dropLast = dropLastForBudget)
-                        chatParams.setDirty(false)
-                    }
-                    val conv = conversation ?: throw IllegalStateException(getString(R.string.s_042))
-                    val tc = ThinkingConfig(
-                        enableThinking = thinkingActive,
-                        thinkingTokenBudget = chatParams.thinkBudgetOrUnlimited(),
-                    )
-                    val flow = when {
-                        toolReturn == null -> {
-                            val ask: Contents = if (items.size == 1 && items[0] is Content.Text) {
-                                Contents.of(overText)
-                            } else {
-                                Contents.of(items)
-                            }
-                            conv.sendMessageAsync(ask, thinkingConfig = tc)
-                        }
-                        // 工具结果优先按「工具返回」回传（LiteRT-LM 原生帧），
-                        // 模板不认再退回 system 消息，最后才退回普通文本消息。
-                        attempt == 0 -> conv.sendMessageAsync(
-                            Message.tool(Contents.of(Content.ToolResponse("tagger", toolReturn.text))),
-                            thinkingConfig = tc,
-                        )
-                        attempt == 1 -> conv.sendMessageAsync(
-                            Message.system(toolReturn.text),
-                            thinkingConfig = tc,
-                        )
-                        else -> conv.sendMessageAsync(Message.user(toolReturn.text), thinkingConfig = tc)
-                    }
-                    flow.collect { msg ->
-                        val delta = extractText(msg)
-                        val thoughtDelta = msg.channels["thought"]
-                        if (!thoughtDelta.isNullOrEmpty()) {
-                            val cur = thoughtBuf.toString()
-                            val merged = mergeStreamDelta(cur, thoughtDelta)
-                            if (merged != cur) {
-                                thoughtBuf.setLength(0)
-                                thoughtBuf.append(merged)
-                                turn.thought = thoughtPrefix + merged
-                                if (ai.thoughtBox.visibility != View.VISIBLE) ai.thoughtBox.visibility = View.VISIBLE
-                                renderThought()
-                            }
-                        }
-                        if (delta.isNotEmpty()) {
-                            val cur = answerBuf.toString()
-                            val merged = mergeStreamDelta(cur, delta)
-                            if (merged != cur) {
-                                answerBuf.setLength(0)
-                                answerBuf.append(merged)
-                                turn.answer = displayPrefix + merged
-                                renderAnswer()
-                            }
-                        }
-                        chatScrollManager?.scrollToBottom()
-                    }
-                    renderThought()
-                }
-                break
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                // 只在「一个字都还没吐出来」时换角色重试，避免把半截输出丢了
-                val retry = toolReturn != null && !stopRequested && attempt < 2 &&
-                    answerBuf.isEmpty() && thoughtBuf.isEmpty() && !isContextOverflow(e)
-                if (!retry) throw e
-                attempt++
-                tagReturnIdx = attempt
-                // 这一条消息可能已经被引擎吃进会话，重建一次把这轮的脏状态丢掉
-                if (!gguf) runCatching { rebuildConversation(silent = true) }
-            }
-        }
-
-        // 本轮收尾：用完整渲染器渲染一次（含表格），并把本轮内容并进这一轮的回答
-        val ans = answerBuf.toString()
-        val th = thoughtBuf.toString()
-        val full = displayPrefix + ans
-        turn.answer = full
-        turn.thought = thoughtPrefix + th
-        if (!hideStream) when {
-            ans.isEmpty() && th.isEmpty() && displayPrefix.isEmpty() -> {
-                ai.answer.text = getString(R.string.s_007)
-                ai.answer.setTextColor(C_SUBTEXT)
-            }
-            ans.isEmpty() && displayPrefix.isEmpty() && th.isNotEmpty() -> {
-                // Modelo sin canal de respuesta (típico: no-reasoning con "Thinking
-                // mode" activo) → no dejar la burbuja vacía: usar lo generado como
-                // respuesta. Antes solo se veía "(model returned reasoning only)".
-                markwonFull.setMarkdown(ai.answer, th)
-                ai.answer.setTextColor(C_TEXT)
-                turn.answer = th
-            }
-            full.isNotEmpty() -> {
-                // tps: estimación ~4 chars/token; nota itálica al pie (no persistida en turn.answer)
-                val elapsed = SystemClock.uptimeMillis() - genStart
-                val foot = if (elapsed >= 50 && ans.isNotEmpty()) {
-                    val tok = ans.length / 4.0
-                    "\n\n_≈" + "%.1f".format(tok / (elapsed / 1000.0)) + " tok/s · " +
-                        "%.1f".format(elapsed / 1000.0) + "s_"
-                } else null
-                lastTpsFoot = foot
-                markwonFull.setMarkdown(ai.answer, if (foot != null) full + foot else full)
-            }
-        }
-        ai.thoughtBody.text = thoughtPrefix + th
-        chatScrollManager?.scrollToBottom()
-        return RoundOut(ans, th)
-    }
 
     /** 对话页当前是否「出图模式」。
      *  规则：语言模型在场时（包括两种模型同时加载），对话页一律走聊天；
      *  只有「绘图模型已就绪、且没有加载语言模型」时，对话页输入才当成绘图提示词。 */
-    private val drawMode: Boolean
+    internal val drawMode: Boolean
         get() = drawPage?.isReady() == true && engine == null && llamaModel == null
 
     /** .gguf 架构探测结果缓存，避免重复读头部 */
     private val ggufKindCache = HashMap<String, GgufProbe.Kind>()
-    private var genJob: Job? = null
+    internal var genJob: Job? = null
     /** Ultimo resultado del benchmark (para compartir anonimamente). */
     private data class BenchStats(
         val model: String, val backend: String, val device: String, val soc: String,
@@ -695,35 +445,35 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     )
     private var lastBench: BenchStats? = null
     /** Footnote '≈X tok/s' de la última generación (solo render en vivo). */
-    private var lastTpsFoot: String? = null
+    internal var lastTpsFoot: String? = null
 
     // QaTurn is imported from ChatState.kt
 
     private val sessions = mutableListOf<ChatSession>()
-    private lateinit var current: ChatSession
+    internal lateinit var current: ChatSession
 
     /** 当前会话创建时的思考开关状态；与复选框不一致时需重建会话。 */
-    private var convThinking: Boolean? = null
+    internal var convThinking: Boolean? = null
 
     /** 中断后 LiteRT 会话可能已不可用：标记下一条消息发送前静默重建。 */
-    private var convNeedsRebuild = false
+    internal var convNeedsRebuild = false
 
     /** 创建 LiteRT 会话时是否注入了 <draw> 绘图命令提示。
      *  加载/卸载绘图模型会改变这个能力，而 LiteRT 的 system 提示只在建会话时写入，
      *  所以能力变化后必须重建会话，否则模型根本不知道自己能画图。 */
-    private var convDrawCapable = false
+    internal var convDrawCapable = false
 
     /** GGUF（llama.cpp）后端实例；非空表示当前加载的是 .gguf 模型。 */
-    private var llamaModel: LlamaModel? = null
-    private var ggufIterator: LlamaIterator? = null
+    internal var llamaModel: LlamaModel? = null
+    internal var ggufIterator: LlamaIterator? = null
 
     /** 用户点了「停止」。native 中断后往往抛异常（如 llama.cpp 的 task not found），
      *  用它把「主动中断」和「真的出错」分开，避免已输出的内容被错误信息覆盖。 */
     @Volatile
-    private var stopRequested = false
+    internal var stopRequested = false
 
-    private lateinit var markwonFull: Markwon
-    private lateinit var markwonStream: Markwon
+    internal lateinit var markwonFull: Markwon
+    internal lateinit var markwonStream: Markwon
 
     // ---- views ----
     private lateinit var statusTv: TextView
@@ -762,7 +512,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private lateinit var inputBar: View
 
     /** 绘图页（文生图/图生图），懒加载 */
-    private var drawPage: DrawPage? = null
+    internal var drawPage: DrawPage? = null
     private lateinit var appBarMenu: View
     private lateinit var appBarPlus: View
     private lateinit var drawerPanel: LinearLayout
@@ -814,11 +564,11 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private var pendingDrawStage: String? = null
     private val backendSpinner: Spinner get() = modelsPage.backendSpinner
     private val loadButton: TextView get() = modelsPage.loadButton
-    private lateinit var thinkCheck: CheckBox
+    internal lateinit var thinkCheck: CheckBox
     private val progressBar: ProgressBar get() = modelsPage.progressBar
     private lateinit var chatContainer: LinearLayout
     private lateinit var scrollView: ScrollView
-    private lateinit var inputEdit: EditText
+    internal lateinit var inputEdit: EditText
 
     /** Pestaña de descargas (lista del catálogo + progreso). */
     private var downloadPage: DownloadPage? = null
@@ -827,7 +577,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private lateinit var jumpButton: TextView
 
     // ---- scroll state (delegado a ChatScrollManager) ----
-    private var chatScrollManager: ChatScrollManager? = null
+    internal var chatScrollManager: ChatScrollManager? = null
 
     // ---- state ----
     private var currentTab = 0
@@ -1911,7 +1661,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     }
 
     /** 用户发的图片也落盘（JPEG），随会话一起恢复。 */
-    private fun writeChatJpeg(bmp: Bitmap, name: String): Boolean = try {
+    internal fun writeChatJpeg(bmp: Bitmap, name: String): Boolean = try {
         val dir = File(filesDir, "chatimg").apply { mkdirs() }
         File(dir, name).outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
         true
@@ -1946,7 +1696,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         )
 
     /** 判断是不是「上下文塞不下」这类错误（LiteRT Status Code 3 / llama.cpp 的 context 满） */
-    private fun isContextOverflow(e: Throwable): Boolean {
+    internal fun isContextOverflow(e: Throwable): Boolean {
         val m = (e.message ?: "").lowercase()
         return m.contains("too long") || m.contains("maximum number of tokens") ||
             m.contains("out of context") ||
@@ -2022,7 +1772,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
     // ================= status =================
 
-    private fun setStatus(text: String, color: Int) {
+    internal fun setStatus(text: String, color: Int) {
         statusTv.text = text
         statusDot.background = rounded(color, 99)
     }
@@ -2252,7 +2002,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         val dpg = drawPage ?: return
         val slot = pendingSlotKey
         pendingSlotKey = null
-        setBusy(true)
+        applyBusy(true)
         setDrawBusy(true)
         showDrawProgress(true)
         setStatus(getString(R.string.s_131), C_WARN)
@@ -2263,7 +2013,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 onStage = { stage -> drawModelStatus?.text = stage },
                 onProgress = { done, total -> updateDrawProgress(done, total) }
             )
-            setBusy(false)
+            applyBusy(false)
             setDrawBusy(false)
             showDrawProgress(false)
             if (err == null) {
@@ -2291,7 +2041,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private fun handlePickedLora(data: Intent?) {
         val uri = data?.data ?: return
         val dpg = drawPage ?: return
-        setBusy(true)
+        applyBusy(true)
         setDrawBusy(true)
         showDrawProgress(true)
         setStatus(getString(R.string.s_131), C_WARN)
@@ -2301,7 +2051,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 onStage = { stage -> loraStatusTv?.text = stage },
                 onProgress = { done, total -> updateDrawProgress(done, total) }
             )
-            setBusy(false)
+            applyBusy(false)
             setDrawBusy(false)
             showDrawProgress(false)
             if (err == null) {
@@ -2319,7 +2069,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private fun handlePickedTaggerOnnx(data: Intent?) {
         val uri = data?.data ?: return
         val dpg = drawPage ?: return
-        setBusy(true)
+        applyBusy(true)
         setDrawBusy(true)
         showDrawProgress(true)
         setStatus(getString(R.string.s_131), C_WARN)
@@ -2329,7 +2079,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 onStage = { stage -> taggerStatusTv?.text = stage },
                 onProgress = { done, total -> updateDrawProgress(done, total) }
             )
-            setBusy(false)
+            applyBusy(false)
             setDrawBusy(false)
             showDrawProgress(false)
             if (err == null) {
@@ -2347,7 +2097,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private fun handlePickedTaggerCsv(data: Intent?) {
         val uri = data?.data ?: return
         val dpg = drawPage ?: return
-        setBusy(true)
+        applyBusy(true)
         setDrawBusy(true)
         showDrawProgress(true)
         setStatus(getString(R.string.s_131), C_WARN)
@@ -2357,7 +2107,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 onStage = { stage -> taggerStatusTv?.text = stage },
                 onProgress = { done, total -> updateDrawProgress(done, total) }
             )
-            setBusy(false)
+            applyBusy(false)
             setDrawBusy(false)
             showDrawProgress(false)
             if (err == null) {
@@ -2374,7 +2124,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
     /** Models can't be loaded from a content:// URI, so copy them to a real file first. */
     private fun copyModelToPrivate(uri: Uri) {
-        setBusy(true)
+        applyBusy(true)
         setStatus(getString(R.string.s_130), C_WARN)
         progressBar.visibility = View.VISIBLE
         progressBar.progress = 0
@@ -2418,7 +2168,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     toast(getString(R.string.v_004, (e.message)))
                 }
             } finally {
-                withContext(Dispatchers.Main) { progressBar.visibility = View.GONE; setBusy(false) }
+                withContext(Dispatchers.Main) { progressBar.visibility = View.GONE; applyBusy(false) }
             }
         }
     }
@@ -2778,7 +2528,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         val isGguf = path.endsWith(".gguf", ignoreCase = true)
         val backendName = backendSpinner.selectedItem.toString()
         val thinking = thinkCheck.isChecked
-        setBusy(true)
+        applyBusy(true)
         setStatus(getString(R.string.s_127), C_WARN)
         progressBar.visibility = View.VISIBLE
         progressBar.isIndeterminate = true
@@ -2883,7 +2633,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
                     progressBar.isIndeterminate = false
-                    setBusy(false)
+                    applyBusy(false)
                 }
             }
         }
@@ -2928,7 +2678,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             // 不能只依赖协程的 finally 来复位：native 推理不响应协程取消时 finally 会迟迟不执行，
             // busy 一直卡在 true，之后每条消息都被「正在生成中」挡回来。这里主动复位。
             genJob = null
-            if (busy) setBusy(false)
+            if (busy) applyBusy(false)
             setStoppingUi(false)
             // cancelProcess() 之后 LiteRT 的 Conversation 可能已不可用：
             // 标记下一条消息发送前用历史静默重建，否则中断后再也发不出内容。
@@ -2939,7 +2689,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         }
     }
 
-    private fun setStoppingUi(stop: Boolean) {
+    internal fun setStoppingUi(stop: Boolean) {
         if (stop) {
             sendButton.text = "■"
             sendButton.textSize = 16f
@@ -3025,7 +2775,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
      * 会话跑起来后仅改 per-call 的 ThinkingConfig 不会生效（尤其是 关→开），
      * 所以必须按新模式重建会话；历史通过 initialMessages 保留。
      */
-    private fun rebuildConversation(silent: Boolean = false, dropLast: Boolean = false) {
+    internal fun rebuildConversation(silent: Boolean = false, dropLast: Boolean = false) {
         val eng = engine ?: return
         val thinking = thinkCheck.isChecked
         try { conversation?.close() } catch (_: Throwable) {}
@@ -3078,7 +2828,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
      * 重新生成某一轮的回答。
      * 该轮之后的轮次依赖这轮的上下文，必须一并丢弃；然后把它重新送进去生成。
      */
-    private fun regenerate(turn: QaTurn) {
+    internal fun regenerate(turn: QaTurn) {
         if (busy) {
             toast(getString(R.string.s_144))
             return
@@ -3169,7 +2919,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
     // ---- 持久化 ----
 
-    private fun doDrawFromChat(prompt: String, dpg: DrawPage) {
+    internal fun doDrawFromChat(prompt: String, dpg: DrawPage) {
         if (busy) { toast(getString(R.string.s_133)); return }
         val turn = QaTurn(prompt)
         current.turns += turn
@@ -3178,7 +2928,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         inputEdit.setText("")
         addUserBubble(prompt)
         chatScrollManager?.jumpToBottom()
-        setBusy(true)
+        applyBusy(true)
         setStoppingUi(true)
         setStatus(getString(R.string.s_166), C_WARN)
 
@@ -3241,7 +2991,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 ticker.cancel()
                 ai.regenButton.visibility = View.VISIBLE
                 sessionManager.save()
-                setBusy(false)
+                applyBusy(false)
                 setStoppingUi(false)
                 chatScrollManager?.scrollToBottom()
             }
@@ -3376,302 +3126,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         }
     }
 
-    private fun doSend() {
-        val text = inputEdit.text.toString().trim()
-        val attachBmps = attachmentHandler.getPendingImages().map { it.bmp }
-        val attachJpegs = attachmentHandler.getPendingImages().map { it.jpeg }
-        // 用户这一轮带的文件：附件条里有就正常发（「重新生成」也会先把上一轮的文件还原回附件条）
-        if (text.isEmpty() && attachJpegs.isEmpty() && attachmentHandler.getPendingFiles().isEmpty()) return
-        // 文件是「文字」，任何模型都能读，不受多模态限制
-        val fileBlock = chatManager.buildFileBlock(attachmentHandler.getPendingFiles())
-        val fileNames = attachmentHandler.getPendingFiles().map { it.name }
-        var sendText = ChatSendLogic.composeSendText(text, fileBlock)
-        // 生成过程中不允许发起新的一轮（选图/引用可以在生成中进行，发送不行）
-        if (busy) { toast(getString(R.string.s_133)); return }
 
-        // 带图发送：模型要么自己能看图（.litertlm 多模态 / 挂了 mmproj 的 gguf），
-        // 要么能借打标模型看图（看不见图时用 <tag> 命令让打标模型识别）
-        if (attachJpegs.isNotEmpty()) {
-            if (engine == null && llamaModel == null) { toast(getString(R.string.s_273)); return }
-            if (!visionOk && !canTagFromChat) { toast(getString(R.string.s_272)); return }
-        }
 
-        // 绘图模式：把输入当作正面提示词，按绘图页的参数（除正面提示词外）生成
-        val dpg = drawPage
-        if (drawMode && dpg != null) {
-            doDrawFromChat(text, dpg)
-            return
-        }
-
-        val isGgufRun = llamaModel != null
-        if (conversation == null && !isGgufRun) { toast(getString(R.string.s_174)); return }
-        if (busy) {
-            toast(getString(R.string.s_133))
-            return
-        }
-        var conv: Conversation? = null
-        if (!isGgufRun) {
-            val needThinkingRebuild = convThinking != thinkCheck.isChecked
-            // 绘图能力开关变了（加载/卸载绘图模型）也要重建：
-            // system 里的 <draw> 提示只在建会话时写入，不重建则模型不知道能画图
-            val needCapRebuild = convDrawCapable != canDrawFromChat
-            if (convNeedsRebuild || needThinkingRebuild || needCapRebuild) {
-                // 上一轮被中断：cancelProcess() 之后会话可能已不可用，静默用历史重建
-                convNeedsRebuild = false
-                // 只有「思考开关变化」需要给用户可见提示，中断恢复/能力变化都静默重建
-                rebuildConversation(silent = !needThinkingRebuild)
-            }
-            conv = conversation ?: run { toast(getString(R.string.s_042)); return }
-        }
-
-        val turn = QaTurn(text)
-        current.turns += turn
-        // 模型看不见图：把可用的打标命令说明附在本轮消息末尾（不进历史）
-        // 注意：必须等 turn.userImage 写好后才能判断，否则提示根本不会被加上
-        if (fileNames.isNotEmpty()) {
-            turn.userFile = fileNames.joinToString("|")
-            turn.fileText = fileBlock
-            // 把文件原始内容存进这一轮，方便「重新生成」把附件还原回附件条
-            turn.fileStore = chatManager.encodeFiles(attachmentHandler.getPendingFiles())
-        }
-        if (current.title == getString(R.string.s_109)) {
-            current.title = ChatSendLogic.computeSeedTitle(
-                text = text,
-                firstFileName = fileNames.firstOrNull(),
-                defaultTitle = getString(R.string.s_278),
-                isPlaceholderTitle = true,
-            )
-        }
-
-        if (attachJpegs.isNotEmpty()) {
-            val names = ArrayList<String>()
-            for ((idx, img) in attachmentHandler.getPendingImages().withIndex()) {
-                val nm = "u_${System.currentTimeMillis()}_$idx.jpg"
-                if (writeChatJpeg(img.bmp, nm)) names.add(nm)
-            }
-            if (names.isNotEmpty()) turn.userImage = names.joinToString("|")
-            attachmentHandler.clearPendingImages()
-        }
-        // 模型看不见图：本轮带图时先告诉它「这条消息带了图片」，再给打标工具说明，
-        // 否则它会直接反问「请提供图片」（这段只用于本轮，不进历史）
-        if (canTagTurn(turn)) sendText += "\n\n" + tagHint(turn)
-        attachmentHandler.clearPendingFiles()
-
-        inputEdit.setText("")
-        addUserBubble(text, attachBmps, fileNames)
-        chatScrollManager?.jumpToBottom()
-        setBusy(true)
-        setStoppingUi(true)
-        setStatus(getString(R.string.s_143), C_WARN)
-
-        val ai = addAiArea { regenerate(turn) }
-        ai.regenButton.visibility = View.GONE   // 生成结束后再显示，避免与「停止」混淆
-        var cancelled = false
-        stopRequested = false
-
-        genJob = scope.launch {
-            var drawReq: String? = null
-            var shown = ""          // 气泡里当前的正文（前几轮 + 本轮输出）
-            var thoughtShown = ""   // 已经落在思考区里的内容
-            try {
-                // ===== agent 循环：生成 → 模型要调工具就执行 → 把结果补回上下文再生成 =====
-                var overText = sendText   // 本轮要发的文本（第一轮＝输入＋文件正文＋工具说明）
-                // 打标结果按「工具返回」回传（system / tool 角色，不冒充用户消息）
-                var toolReturn: ToolReturn? = null
-                var round = 0
-                var autoTagged = false
-                var tagRan = false      // 这一轮真的跑过打标（用于兜底纠偏）
-                var nudgeUsed = false
-                // 带图、模型又看不见图：第一轮先显示一句占位（这一轮的内容不显示，免得命令命中后整段消失重来）
-                if (canTagTurn(turn)) markwonStream.setMarkdown(ai.answer, getString(R.string.s_323))
-                while (true) {
-                    val out = runRound(
-                        turn = turn,
-                        ai = ai,
-                        gguf = isGgufRun,
-                        jpegs = attachJpegs,
-                        overText = overText,
-                        displayPrefix = shown,
-                        thoughtPrefix = thoughtShown,
-                        toolReturn = toolReturn,
-                        dropLastForBudget = round == 0,
-                        // 带图、模型又看不见图时，第一轮先不显示：它可能先啰嗦一段再吐 <tag>，
-                        // 直接显示的话命令命中后这段会消失重来
-                        hideStream = round == 0 && canTagTurn(turn),
-                    )
-                    var roundText = out.answer
-
-                    // ① 出图命令优先：交给绘图模型（真正出图放在 finally，必须等 busy 复位）
-                    val drawHit = scanDrawCommand(roundText, out.thought)
-                    if (drawHit != null) {
-                        if (drawHit.inAnswer) {
-                            roundText = roundText.replaceRange(
-                                drawHit.start, drawHit.end, getString(R.string.s_200, drawHit.prompt)
-                            )
-                            thoughtShown += out.thought
-                        } else {
-                            thoughtShown += out.thought.replaceRange(
-                                drawHit.start, drawHit.end, getString(R.string.s_199, drawHit.prompt)
-                            )
-                        }
-                        shown += roundText
-                        drawReq = drawHit.prompt
-                        break
-                    }
-
-                    // ② 打标命令：模型自己看不见图时，让它借打标模型看图，拿到标签再回答
-                    val tagHit = if (round < MAX_TAG_ROUNDS) scanTagCommand(roundText, out.thought) else null
-                    // 兜底：小模型经常无视图片工具、直接反问「请提供图片」。这一轮带图、它又像在推辞时，
-                    // App 替它调用一次打标模型（阈值/标签数用默认 0.35 / 40），结果照样按「工具返回」发回去。
-                    val autoTagRes: String? = if (tagHit == null && round == 0 && !autoTagged && canTagFromChat &&
-                        attachJpegs.isNotEmpty() && commandScanner.looksLikeBlindRefusal(roundText)
-                    ) {
-                        autoTagged = true
-                        val autoNames = turn.userImage?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
-                        val r = if (autoNames.isEmpty()) "" else {
-                            // 打标结果不展示：先把这一轮的推辞内容清掉
-                            shown = ""
-                            turn.answer = ""
-                            markwonFull.setMarkdown(ai.answer, "")
-                            withContext(Dispatchers.IO) {
-                                runCatching { runTaggerOnImages(autoNames, TagReq(0.35f, 40)) }.getOrDefault("")
-                            }
-                        }
-                        r.ifEmpty { null }
-                    } else null
-                    if (tagHit == null && autoTagRes == null) {
-                        val clean = commandScanner.stripTagCommand(roundText)
-                        // 模型把工具结果当成新的输入、反过来问用户「请提出您的问题」：明确提示后重来一轮（只一次）
-                        if (tagRan && !nudgeUsed && commandScanner.looksLikeQuestionAsk(clean)) {
-                            nudgeUsed = true
-                            shown = ""
-                            turn.answer = ""
-                            markwonFull.setMarkdown(ai.answer, "")
-                            thoughtShown += out.thought
-                            overText = getString(R.string.s_331, turn.user.take(200))
-                            round++
-                            continue
-                        }
-                        // 没有可用的工具调用：把可能残留的 <tag> 命令抹掉（模型有读图能力、打标路径已关闭时）
-                        shown += clean
-                        thoughtShown += out.thought
-                        break
-                    }
-                    if (tagHit == null) {
-                        // 兜底路径：模型没调用工具，但打标结果已经有了，直接当工具返回发回去（不展示标签）
-                        thoughtShown += out.thought
-                        val autoBlock = getString(R.string.s_328, autoTagRes, turn.user.take(200))
-                        overText = autoBlock
-                        // gguf：用「模型只输出了 <tag> 命令」的干净形态回填，别把上一轮的推辞带进上下文
-                        val autoCmd = "<tag threshold=\"0.35\" topk=\"40\"></tag>"
-                        toolReturn = ToolReturn(if (isGgufRun) autoCmd else out.answer, autoBlock)
-                        tagRan = true
-                        round++
-                        chatScrollManager?.scrollToBottom()
-                        continue
-                    }
-                    // 把命令换成一行说明：正文里的换在正文，思考里的换在思考区、正文补一行
-                    val _tagHit = tagHit!! // safe: already null-checked above at line 4930
-                    fun swapLine(replacement: String): String = if (_tagHit.inAnswer) {
-                        thoughtShown += out.thought
-                        roundText.replaceRange(_tagHit.start, _tagHit.end, replacement)
-                    } else {
-                        thoughtShown += out.thought.replaceRange(
-                            _tagHit.start, _tagHit.end, getString(R.string.s_323)
-                        )
-                        (roundText + "\n\n" + replacement).trim()
-                    }
-
-                    val names = turn.userImage?.split("|")?.filter { it.isNotEmpty() } ?: emptyList()
-                    // 打标结果不展示：先把气泡里这一轮的调用过程清掉，识别完由模型直接给最终回答
-                    shown = ""
-                    turn.answer = ""
-                    markwonFull.setMarkdown(ai.answer, "")
-                    val res = if (names.isEmpty()) {
-                        "\u0000" + getString(R.string.s_326)
-                    } else {
-                        withContext(Dispatchers.IO) {
-                            runCatching { runTaggerOnImages(names, tagHit.req) }.getOrElse { e ->
-                                "\u0000" + (e.message ?: "")
-                            }
-                        }
-                    }
-                    if (res.startsWith("\u0000")) {
-                        // 这轮没有图片、或打标失败：把命令换成原因，本轮就此结束
-                        shown += swapLine(getString(R.string.s_325, res.removePrefix("\u0000")))
-                        break
-                    }
-                    if (res.isEmpty()) {
-                        shown += swapLine(getString(R.string.s_327))
-                        break
-                    }
-                    // 成功：不展示标签，气泡留空，等模型基于标签给出最终回答
-                    thoughtShown += if (tagHit.inAnswer) out.thought else {
-                        out.thought.replaceRange(_tagHit.start, _tagHit.end, getString(R.string.s_323))
-                    }
-                    val block = getString(R.string.s_328, res, turn.user.take(200))
-                    overText = block
-                    // gguf：用「模型只输出了 <tag> 命令」的干净形态回填，别把它上一轮的碎碎念带进上下文
-                    val cmdEcho = "<tag threshold=\"${tagHit.req.threshold}\" topk=\"${tagHit.req.topK}\"></tag>"
-                    toolReturn = ToolReturn(if (isGgufRun) cmdEcho else out.answer, block)
-                    tagRan = true
-                    round++
-                    chatScrollManager?.scrollToBottom()
-                }
-                turn.answer = shown.trimEnd()
-                if (turn.answer.isNotEmpty()) {
-                    markwonFull.setMarkdown(ai.answer, turn.answer + (lastTpsFoot ?: ""))
-                } else if (turn.thought.isEmpty()) {
-                    // 第一轮被隐藏、模型又什么都没说：给个提示，别留一个空气泡
-                    ai.answer.text = getString(R.string.s_007)
-                    ai.answer.setTextColor(C_SUBTEXT)
-                }
-                sessionManager.save()
-                setStatus(getString(R.string.s_081), C_OK)
-            } catch (e: CancellationException) {
-                cancelled = true
-                throw e
-            } catch (e: Throwable) {
-                if (stopRequested) {
-                    // 主动中断：native 被打断后常抛异常（task not found 等），
-                    // 按「已中断」处理，保留已经输出到界面上的内容
-                    cancelled = true
-                } else if (isContextOverflow(e)) {
-                    // 上下文塞不下：给能操作的提示，别甩一串 Status Code 给用户
-                    ai.answer.text = getString(R.string.s_302)
-                    ai.answer.setTextColor(C_ERR)
-                    setStatus(getString(R.string.s_145), C_ERR)
-                    toast(getString(R.string.s_302))
-                } else {
-                    ai.answer.text = getString(R.string.v_024, (e.message))
-                    ai.answer.setTextColor(C_ERR)
-                    setStatus(getString(R.string.s_145), C_ERR)
-                    toast(getString(R.string.v_025, (e.message)))
-                }
-            } finally {
-                ai.regenButton.visibility = View.VISIBLE
-                sessionManager.save()
-                setBusy(false)
-                setStoppingUi(false)
-                if (cancelled) {
-                    if (turn.answer.isNotEmpty()) {
-                        markwonFull.setMarkdown(ai.answer, turn.answer)
-                    } else if (turn.thought.isEmpty()) {
-                        ai.answer.text = getString(R.string.s_004)
-                        ai.answer.setTextColor(C_SUBTEXT)
-                    }
-                    setStatus(getString(R.string.s_082), C_IDLE)
-                } else if (drawReq != null) {
-                    // 交给绘图模型出图（必须等 busy 复位后再启动，否则会被当成「正在生成中」拦住）
-                    val dpg = drawPage
-                    if (dpg != null) doDrawFromChat(drawReq, dpg)
-                }
-                chatScrollManager?.scrollToBottom()
-            }
-        }
-    }
-
-    private fun extractText(m: Message): String = ChatCore.messageText(m)
+    internal fun extractText(m: Message): String = ChatCore.messageText(m)
 
     /**
      * LiteRT 的流式片段语义在版本间不完全一致（可能是增量片段，也可能带累积内容）。
@@ -3681,9 +3138,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
      *   - 已累积内容以新片段结尾   → 尾部重复片段，丢弃（忽略首尾空白）
      *   - 其余                     → 按增量追加
      */
-    private fun mergeStreamDelta(cur: String, delta: String): String = ChatCore.mergeStream(cur, delta)
+    internal fun mergeStreamDelta(cur: String, delta: String): String = ChatCore.mergeStream(cur, delta)
 
-    private class AiArea(
+    internal class AiArea(
         val root: LinearLayout,
         val thoughtBox: LinearLayout,
         val thoughtHeader: TextView,
@@ -3693,7 +3150,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     )
 
     /** AI reply card: collapsible thinking section on top, Markdown answer below. */
-    private fun addAiArea(onRegen: (() -> Unit)? = null): AiArea {
+    internal fun addAiArea(onRegen: (() -> Unit)? = null): AiArea {
         val wrap = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(10), dp(12), dp(10))
@@ -3762,7 +3219,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         return AiArea(wrap, thoughtBox, thoughtHeader, thoughtBody, answer, regenButton)
     }
 
-    private fun addUserBubble(text: String, images: List<Bitmap> = emptyList(), files: List<String> = emptyList()) {
+    internal fun addUserBubble(text: String, images: List<Bitmap> = emptyList(), files: List<String> = emptyList()) {
         if (files.isNotEmpty()) {
             val strip = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -3849,7 +3306,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
 
 
-    private fun setBusy(b: Boolean) {
+    internal fun applyBusy(b: Boolean) {
         busy = b
         loadButton.isEnabled = !b
         loadButton.alpha = if (b) 0.5f else 1f
