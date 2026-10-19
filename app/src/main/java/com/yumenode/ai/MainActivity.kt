@@ -147,6 +147,51 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         chatPrefs().edit().putBoolean(key, value).apply()
     }
 
+    /** Benchmark local: corre N generaciones cortas sobre el modelo cargado y
+     *  reporta tok/s, latencia, modelo, backend y dispositivo. No sube nada. */
+    override fun runBenchmark(onUpdate: (String) -> Unit) {
+        if (!ChatCore.isReady()) { onUpdate("Load a chat model first."); return }
+        if (ChatCore.busy) { onUpdate("The model is busy. Try again in a moment."); return }
+        scope.launch {
+            val prompt = "Write a short, coherent paragraph about the sea."
+            val runs = 3
+            val tps = ArrayList<Double>()
+            val lat = ArrayList<Long>()
+            var lastTokens = 0
+            for (i in 1..runs) {
+                onUpdate("Running $i/$runs…")
+                val t0 = SystemClock.uptimeMillis()
+                val out = try {
+                    ChatCore.generate(listOf(ChatCore.Msg("user", prompt)), 0.7f, 128) { }
+                } catch (e: Throwable) {
+                    onUpdate("Error: ${e.message ?: e.javaClass.simpleName}")
+                    return@launch
+                }
+                val dt = (SystemClock.uptimeMillis() - t0).coerceAtLeast(1)
+                lastTokens = (out.length / 4).coerceAtLeast(1)
+                lat += dt
+                tps += lastTokens / (dt / 1000.0)
+            }
+            val name = ChatCore.modelName ?: "?"
+            val backend = when {
+                name.endsWith(".gguf", true) -> "llama.cpp (CPU)"
+                name.endsWith(".litertlm", true) -> "LiteRT (CPU)"
+                else -> "?"
+            }
+            val soc = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE
+            val sb = StringBuilder()
+            sb.append("Model: ").append(name).append('\n')
+            sb.append("Backend: ").append(backend).append('\n')
+            sb.append("Device: ").append(Build.MODEL).append(" · ").append(soc).append('\n')
+            sb.append("Tokens (est./run): ").append(lastTokens).append('\n')
+            sb.append("tok/s: avg ").append("%.1f".format(tps.average()))
+                .append(" (min ").append("%.1f".format(tps.min()))
+                .append(" / max ").append("%.1f".format(tps.max())).append(")\n")
+            sb.append("Latency: min ").append(lat.min()).append(" ms · max ").append(lat.max()).append(" ms")
+            onUpdate(sb.toString())
+        }
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private var engine: Engine? = null
