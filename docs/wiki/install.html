@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instalación y requisitos · Wiki Yumenode AI</title>
+<meta name="description" content="Wiki de Yumenode AI: Instalación y requisitos">
+<link rel="icon" href="../img/icon.webp">
+<link rel="stylesheet" href="wiki.css">
+</head><body>
+<div class="top"><div class="in">
+  <a class="brand" href="../index.html"><img src="../img/icon.webp" alt="">Yumenode <b>AI</b> <span style="color:var(--sub);font-weight:500">· Wiki</span></a>
+  <div class="sp"><a href="../index.html">Sitio</a><a href="https://github.com/cjml555/Yumenode-AI">GitHub ↗</a></div>
+</div></div>
+<div class="layout">
+<aside class="side"><div class="side-group">Empezar</div><a href="index.html">Inicio</a><a href="install.html" class="on">Instalación y requisitos</a><div class="side-group">Modelos</div><a href="models.html">Modelos y formatos</a><a href="chat.html">Chat</a><a href="images.html">Generación de imágenes</a><a href="tagger.html">Etiquetador</a><div class="side-group">Integraciones</div><a href="api.html">API compatible con OpenAI</a><a href="benchmark.html">Benchmark y privacidad</a><div class="side-group">Ayuda</div><a href="troubleshooting.html">Solución de problemas</a><a href="privacy.html">Privacidad y datos</a><a href="faq.html">Preguntas frecuentes</a><div class="side-group">Desarrollo</div><a href="build.html">Compilar y desarrollar</a></aside>
+<article>
+<div class="crumb">Wiki · Instalación y requisitos</div>
+<h1>Instalación y requisitos</h1>
+
+<h2>Descargar el APK</h2>
+<p>La vía más rápida es la página de <a href="https://github.com/cjml555/Yumenode-AI/releases/latest">Releases</a>:
+descarga <code>app-release.apk</code> y ábrelo en el teléfono (tendrás que permitir instalar desde esa fuente).</p>
+<table>
+<thead><tr><th>Requisito</th><th>Valor</th></tr></thead>
+<tbody>
+<tr><td>Arquitectura</td><td><code>arm64-v8a</code> (solo 64-bit ARM)</td></tr>
+<tr><td>Android mínimo</td><td>9 (API 28)</td></tr>
+<tr><td>Android objetivo</td><td>16 (API 36)</td></tr>
+<tr><td>Espacio libre</td><td>~1–3 GB por modelo (varía)</td></tr>
+</tbody></table>
+
+<h2>Compilar desde el código</h2>
+<pre><code>git clone https://github.com/cjml555/Yumenode-AI.git
+cd Yumenode-AI
+./gradlew assembleRelease
+# Salida: app/build/outputs/apk/release/app-release-unsigned.apk</code></pre>
+<table>
+<thead><tr><th>Dependencia</th><th>Versión</th></tr></thead>
+<tbody>
+<tr><td>JDK</td><td>17</td></tr>
+<tr><td>compileSdk / targetSdk</td><td>36</td></tr>
+<tr><td>minSdk</td><td>28</td></tr>
+<tr><td>NDK</td><td>27.3</td></tr>
+<tr><td>CMake</td><td>3.31.6</td></tr>
+</tbody></table>
+
+<h2>Firmar</h2>
+<p>Los scripts de firma viven en <code>tools/</code> y <strong>no contienen contraseñas</strong>: leen
+<code>keystore.properties</code> (ignorado por git) o la variable de entorno <code>PONKO_KS_PASS</code>.</p>
+<pre><code>powershell -ExecutionPolicy Bypass -File tools/sign-apk.ps1 \
+  -Apk app\build\outputs\apk\release\app-release-unsigned.apk</code></pre>
+
+<h2>Instalar por ADB</h2>
+<pre><code>adb install -r app/build/outputs/apk/debug/app-debug.apk</code></pre>
+<div class="note"><b>Builds de debug:</b> permiten HTTP en claro (necesario para apuntar el benchmark a un
+Worker local). Las builds de release exigen HTTPS.</div>
+
+<div class="pager"><a href="index.html">← Inicio</a><a href="models.html">Modelos y formatos →</a></div>
+</article>
+</div>
+<footer><div class="in"><span>Yumenode AI · MIT · fork de <a href="https://github.com/visitor257/Ponko">Ponko</a></span><span><a href="../index.html">Sitio</a> · <a href="https://github.com/cjml555/Yumenode-AI/wiki">GitHub Wiki (espejo)</a></span></div></footer>
+</body></html>

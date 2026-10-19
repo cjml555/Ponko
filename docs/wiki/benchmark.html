@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Benchmark y privacidad · Wiki Yumenode AI</title>
+<meta name="description" content="Wiki de Yumenode AI: Benchmark y privacidad">
+<link rel="icon" href="../img/icon.webp">
+<link rel="stylesheet" href="wiki.css">
+</head><body>
+<div class="top"><div class="in">
+  <a class="brand" href="../index.html"><img src="../img/icon.webp" alt="">Yumenode <b>AI</b> <span style="color:var(--sub);font-weight:500">· Wiki</span></a>
+  <div class="sp"><a href="../index.html">Sitio</a><a href="https://github.com/cjml555/Yumenode-AI">GitHub ↗</a></div>
+</div></div>
+<div class="layout">
+<aside class="side"><div class="side-group">Empezar</div><a href="index.html">Inicio</a><a href="install.html">Instalación y requisitos</a><div class="side-group">Modelos</div><a href="models.html">Modelos y formatos</a><a href="chat.html">Chat</a><a href="images.html">Generación de imágenes</a><a href="tagger.html">Etiquetador</a><div class="side-group">Integraciones</div><a href="api.html">API compatible con OpenAI</a><a href="benchmark.html" class="on">Benchmark y privacidad</a><div class="side-group">Ayuda</div><a href="troubleshooting.html">Solución de problemas</a><a href="privacy.html">Privacidad y datos</a><a href="faq.html">Preguntas frecuentes</a><div class="side-group">Desarrollo</div><a href="build.html">Compilar y desarrollar</a></aside>
+<article>
+<div class="crumb">Wiki · Benchmark y privacidad</div>
+<h1>Benchmark y privacidad</h1>
+
+<p>El benchmark mide el rendimiento real del modelo de chat cargado y te permite compararlo con otros equipos.</p>
+
+<h2>Ejecutarlo</h2>
+<p><strong>Ajustes → Benchmark → Ejecutar benchmark</strong>. Hace varias generaciones cortas y muestra:</p>
+<ul>
+  <li><strong>tok/s</strong> promedio, mínimo y máximo.</li>
+  <li><strong>Latencia</strong> mínima y máxima.</li>
+  <li>Modelo, backend y dispositivo (modelo + SoC).</li>
+</ul>
+<p>Todo se calcula y se muestra <strong>en el dispositivo</strong>; el benchmark funciona sin conexión.</p>
+
+<h2>Compartir (opcional)</h2>
+<p>El botón <strong>Compartir anónimamente</strong> envía el resultado al Worker de estadísticas. Es una acción
+explícita: si no lo pulsas, no sale nada del teléfono.</p>
+<table>
+<thead><tr><th>Se envía</th><th>No se envía</th></tr></thead>
+<tbody>
+<tr><td>Modelo, backend, dispositivo, SoC, versión</td><td>Identificadores de usuario o de dispositivo</td></tr>
+<tr><td>tok/s (prom/mín/máx), latencia, nº de tokens</td><td>Dirección IP (el Worker no la lee ni la guarda)</td></tr>
+<tr><td>Marca de tiempo</td><td>Prompts, respuestas, imágenes o archivos</td></tr>
+</tbody></table>
+
+<h2>¿Es telemetría?</h2>
+<p><strong>No.</strong> Telemetría implica recolección automática y desatendida; aquí no existe: la app no envía
+nada por su cuenta. Es una <strong>contribución voluntaria y anónima</strong> que solo ocurre cuando tú pulsas el
+botón.</p>
+
+<h2>Dónde ver los rankings</h2>
+<ul>
+  <li><a href="https://cjml555.github.io/Yumenode-AI/#bench">Rankings en el sitio</a> (tabla y lista, por tok/s).</li>
+  <li><a href="https://yumenode-bench.cjml555.workers.dev">Dashboard del Worker</a> (agregado en bruto).</li>
+</ul>
+<p>El endpoint por defecto apunta a ese Worker y puedes sustituirlo en <strong>Ajustes → Benchmark</strong> por
+el tuyo propio.</p>
+
+<div class="pager"><a href="api.html">← API compatible con OpenAI</a><a href="troubleshooting.html">Solución de problemas →</a></div>
+</article>
+</div>
+<footer><div class="in"><span>Yumenode AI · MIT · fork de <a href="https://github.com/visitor257/Ponko">Ponko</a></span><span><a href="../index.html">Sitio</a> · <a href="https://github.com/cjml555/Yumenode-AI/wiki">GitHub Wiki (espejo)</a></span></div></footer>
+</body></html>
