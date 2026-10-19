@@ -28,6 +28,11 @@
 <p>Orientativo: modelos 1B–2B en Q4 corren con 4–6 GB; 3B–4B piden 8 GB o más. El sistema mata procesos por OOM
 si te pasas.</p>
 
+<h2>¿Cuántos hilos de CPU uso?</h2>
+<p>Por defecto la app elige los <strong>núcleos grandes</strong> del SoC (en un Snapdragon de 8 núcleos suele
+recomendar 4). Puedes subirlo hasta el total en <strong>Ajustes → Hilos de CPU</strong>; en
+<strong>Ajustes → Dispositivo</strong> ves el SoC, núcleos, RAM, Vulkan y GLES reales del equipo.</p>
+
 <h2>¿Puedo usar la GPU?</h2>
 <p>Hay backend Vulkan para dibujo, pero no está validado en dispositivos reales; si falla, cae a CPU. El chat
 GGUF es solo CPU.</p>

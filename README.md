@@ -110,6 +110,7 @@ Yumenode AI soporta varios flujos de trabajo integrados:
 - Longitud de contexto
 - Salida máxima (tokens)
 - Temperatura, Top-K, Top-P
+- Hilos de CPU: por defecto los núcleos grandes del SoC (se puede forzar el total)
 - Penalización de repetición
 - Presupuesto de razonamiento
 - Semilla

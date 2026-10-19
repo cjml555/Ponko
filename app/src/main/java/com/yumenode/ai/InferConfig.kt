@@ -40,13 +40,24 @@ object InferConfig {
      */
     fun maxThreads(): Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
 
+    /**
+     * Hilos recomendados para este telefono: los nucleos "big".
+     *
+     * En SoC big.LITTLE (Snapdragon/Mali) mandar trabajo a los little o
+     * esperar migraciones cuesta mas que usar solo los grandes.
+     */
+    fun recommendedThreads(c: Context): Int =
+        DeviceProbe.recommendedThreads(DeviceProbe.read(c))
+
     /** 当前线程数（带兼容读取旧键；越界值夹回合法区间） */
     fun threads(c: Context): Int {
         val p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        // Sin valor guardado se usa el recomendado del SoC, no un 4 fijo.
+        val def = recommendedThreads(c)
         val raw = when {
-            p.contains(KEY_THREADS) -> p.getInt(KEY_THREADS, DEFAULT)
-            p.contains(KEY_LEGACY_DRAW) -> p.getInt(KEY_LEGACY_DRAW, DEFAULT)
-            else -> DEFAULT
+            p.contains(KEY_THREADS) -> p.getInt(KEY_THREADS, def)
+            p.contains(KEY_LEGACY_DRAW) -> p.getInt(KEY_LEGACY_DRAW, def)
+            else -> def
         }
         return raw.coerceIn(1, maxThreads())
     }

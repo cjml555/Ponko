@@ -545,4 +545,11 @@
     <string name="s_511">Imágenes</string>
     <string name="s_513">Aún no hay modelos en esta categoría</string>
 
+    <string name="s_514">Dispositivo</string>
+    <string name="s_515">SoC</string>
+    <string name="s_516">Núcleos</string>
+    <string name="s_518">Vulkan</string>
+    <string name="s_519">Recomendado: %1$d (núcleos grandes)</string>
+    <string name="s_521">NPU: aún no soportada - requiere el SDK del fabricante del chip (por ejemplo Qualcomm QNN).</string>
+
 </resources>

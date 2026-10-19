@@ -203,6 +203,44 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         // 不受这项控制。不写清的话，用户会以为是 bug（这条 2026-10-13 由用户要求加回）。
         settingsBody.addView(host.ui.hintText(getString(R.string.s_446)), matchWrap().apply { topMargin = dp(4) })
 
+        settingsBody.addView(
+            host.ui.hintText(getString(R.string.s_519, InferConfig.recommendedThreads(ctx))),
+            matchWrap().apply { topMargin = dp(4) }
+        )
+
+        // ---- Dispositivo: ficha real del hardware (para elegir backend con datos) ----
+        settingsBody.addView(host.ui.subTitle(getString(R.string.s_514)), matchWrap().apply { topMargin = dp(14) })
+        val caps = DeviceProbe.read(ctx)
+        fun specRow(label: String, value: String) {
+            val row = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(TextView(ctx).apply {
+                text = label
+                textSize = 13f
+                setTextColor(C_SUBTEXT)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            })
+            row.addView(TextView(ctx).apply {
+                text = value
+                textSize = 13f
+                setTextColor(C_TEXT)
+                gravity = Gravity.END
+            })
+            settingsBody.addView(row, matchWrap().apply { topMargin = dp(6) })
+        }
+        specRow(getString(R.string.s_515), caps.socLabel)
+        specRow(getString(R.string.s_516), caps.cpuLabel)
+        specRow("RAM", caps.ramLabel)
+        specRow(getString(R.string.s_518), caps.vulkanLabel)
+        specRow("GLES", caps.glesVersion)
+        specRow("ABI", caps.abi)
+        settingsBody.addView(
+            host.ui.hintText(getString(R.string.s_521)),
+            matchWrap().apply { topMargin = dp(6) }
+        )
+
         // ---- Language ----
         settingsBody.addView(host.ui.subTitle(getString(R.string.s_488)), matchWrap().apply { topMargin = dp(14) })
         val curLang = host.currentAppLanguage()
