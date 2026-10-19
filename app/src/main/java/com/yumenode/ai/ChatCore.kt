@@ -57,7 +57,7 @@ object ChatCore {
     private val lock = Mutex()
 
     /** LiteRT 会话缓存：客户端每轮会把整段历史重发，能对上就复用会话，省掉重复 prefill */
-    private class Cached(val prior: List<Msg>, val conv: Conversation)
+    private class Cached(val prior: List<Msg>, val sys: String, val conv: Conversation)
     private var cache: Cached? = null
 
     fun attachLiteRt(eng: Engine, name: String, vision: Boolean) {
@@ -138,7 +138,7 @@ object ChatCore {
         val last = turns.last()
         val prior = turns.dropLast(1)
 
-        val conv = cache?.takeIf { it.prior == prior }?.conv ?: run {
+        val conv = cache?.takeIf { it.prior == prior && it.sys == sys }?.conv ?: run {
             clearCache()
             val initial = ArrayList<Message>()
             prior.forEach { m ->
@@ -157,7 +157,7 @@ object ChatCore {
                     thinkingConfig = ThinkingConfig(enableThinking = false, thinkingTokenBudget = 0),
                     maxOutputToken = maxTokens,
                 )
-            ).also { cache = Cached(prior, it) }
+            ).also { cache = Cached(prior, sys, it) }
         }
 
         val sb = StringBuilder()
