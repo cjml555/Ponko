@@ -529,4 +529,16 @@
 
     <string name="s_498">OLED</string>
 
+    <string name="s_499">Galería</string>
+    <string name="s_500">Aún no hay imágenes</string>
+    <string name="s_501">Las imágenes que guardes o generes aparecerán aquí</string>
+    <string name="s_502">Permitir acceso a fotos</string>
+    <string name="s_503">Compartir</string>
+    <string name="s_504">Eliminar</string>
+    <string name="s_505">¿Eliminar esta imagen?</string>
+    <string name="s_506">%1$d imágenes</string>
+    <string name="s_507">Se necesita acceso a las fotos para mostrar tu galería</string>
+
+    <string name="s_508">No se pudo eliminar esta imagen</string>
+
 </resources>

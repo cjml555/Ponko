@@ -30,6 +30,7 @@ Todo sin necesidad de conexión a internet (excepto para descargar modelos manua
 | **Streaming** | Salida token por token con renderizado Markdown en tiempo real |
 | **Offline-first** | Sin telemetría automática ni cuenta; nada sale del dispositivo salvo lo que tú decidas |
 | **Benchmark** | Mide tok/s, latencia y modelo cargado; resultado local con envío anónimo opcional |
+| **Galería** | Rejilla de imágenes guardadas con visor, zoom, compartir y eliminar |
 
 ### 📸 Capturas de Pantalla
 
@@ -44,7 +45,7 @@ Yumenode AI ofrece una interfaz de usuario limpia e intuitiva con varias pestañ
   <tr>
     <td align="center"><img src="download_tab_thumb.png" width="220" alt="Pestaña Modelos libres"><br><b>Modelos libres</b></td>
     <td align="center"><img src="about_tab_thumb.png" width="220" alt="Pestaña Ajustes"><br><b>Ajustes</b></td>
-    <td align="center"></td>
+    <td align="center"><img src="gallery_tab_thumb.png" width="220" alt="Pestaña Galería"><br><b>Galería</b></td>
   </tr>
 </table>
 
@@ -55,6 +56,8 @@ Yumenode AI ofrece una interfaz de usuario limpia e intuitiva con varias pestañ
 **Draw**: Configuración del modelo de dibujo (Stable Diffusion), selección de tipo/archivo `.gguf`, gestión de conjuntos multiarchivo, LoRA, TAESD y el botón de generar.
 
 **Modelos libres**: Descarga modelos gratuitos desde fuentes confiables (mirrors de Hugging Face) directamente a la app.
+
+**Galería**: Rejilla de las imágenes guardadas en `Pictures/Yumenode AI`. Visor a pantalla completa con zoom, compartir y eliminar.
 
 **Ajustes**: Tema, idioma (Sistema / Inglés / Español), hilos de CPU, benchmark, endpoint personalizado e información de la app (versión, créditos, licencias y componentes de terceros).
 

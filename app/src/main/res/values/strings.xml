@@ -529,4 +529,16 @@
 
     <string name="s_498">OLED</string>
 
+    <string name="s_499">Gallery</string>
+    <string name="s_500">No images yet</string>
+    <string name="s_501">Images you save or generate appear here</string>
+    <string name="s_502">Allow photo access</string>
+    <string name="s_503">Share</string>
+    <string name="s_504">Delete</string>
+    <string name="s_505">Delete this image?</string>
+    <string name="s_506">%1$d images</string>
+    <string name="s_507">Photo access is needed to show your gallery</string>
+
+    <string name="s_508">Could not delete this image</string>
+
 </resources>

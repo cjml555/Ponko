@@ -773,6 +773,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private val savedContainer: LinearLayout get() = modelsPage.savedContainer
     private val modelInfoText: TextView get() = modelsPage.modelInfoText
     private lateinit var tabDownload: View
+    private lateinit var tabGallery: View
 
     /** 模型页里的绘图模型状态文本（模型统一在模型页加载） */
     private val drawModelStatus: TextView? get() = modelsPage.drawModelStatus
@@ -821,6 +822,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
     /** Pestaña de descargas (lista del catálogo + progreso). */
     private var downloadPage: DownloadPage? = null
+    private var galleryPage: GalleryPage? = null
     private lateinit var sendButton: TextView
     private lateinit var jumpButton: TextView
 
@@ -1038,6 +1040,11 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             pal = pal,
         )
         tabDownload = downloadPage!!.build()
+        galleryPage = GalleryPage(
+            this, scope, pal,
+            { ui.card() }, { ui.pageTitle(it) }, { ui.hintText(it) },
+        )
+        tabGallery = galleryPage!!.build()
         // La pestaña de descargas se construye en DownloadPage
         // 绘图模型就绪 → 进入绘图模式（对话页输入即正面提示词）
         dpg.onPipelineReady = {
@@ -1081,6 +1088,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         contentFrame.addView(tabDownload, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        contentFrame.addView(tabGallery, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         main.addView(contentFrame, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
@@ -1099,7 +1108,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         switchTab(0)
         // 主题切换导致的重建：回到重建前那一页（一次性，正常启动不受影响）
         val restoreTab = chatPrefs().getInt("restoreTab", -1)
-        if (restoreTab in 0..4) {
+        if (restoreTab in 0..5) {
             chatPrefs().edit().remove("restoreTab").apply()
             switchTab(restoreTab)
         }
@@ -1496,7 +1505,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             Triple("🧠", getString(R.string.s_124), 1),
             Triple("🎨", getString(R.string.s_150), 2),
             Triple("⬇️", getString(R.string.s_454), 3),
-            Triple("⚙️", getString(R.string.s_381), 4),
+            Triple("🖼️", getString(R.string.s_499), 4),
+            Triple("⚙️", getString(R.string.s_381), 5),
         )
         for ((icon, label, idx) in items) {
             val item = LinearLayout(this).apply {
@@ -1509,7 +1519,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             val iconTv = TextView(this).apply { text = icon; textSize = 17f; gravity = Gravity.CENTER }
             val labelTv = TextView(this).apply {
                 text = label
-                textSize = 11f
+                textSize = 10f
+                maxLines = 2
                 gravity = Gravity.CENTER
                 setPadding(0, dp(1), 0, 0)
             }
@@ -1528,11 +1539,13 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         tabModels.visibility = if (index == 1) View.VISIBLE else View.GONE
         tabDraw.visibility = if (index == 2) View.VISIBLE else View.GONE
         tabDownload.visibility = if (index == 3) View.VISIBLE else View.GONE
-        tabSettings.visibility = if (index == 4) View.VISIBLE else View.GONE
+        tabGallery.visibility = if (index == 4) View.VISIBLE else View.GONE
+        tabSettings.visibility = if (index == 5) View.VISIBLE else View.GONE
         // 切到「模型」页时刷新绘图模型 / LoRA 列表，避免导入后状态滞后
         if (index == 1) { refreshDrawModels(); refreshLoraUi(); refreshTaggerUi(); refreshApiUi(); refreshDrawApiUi() }
         // 切到下载页时刷新列表
         if (index == 3) { downloadPage?.refresh() }
+        if (index == 4) { galleryPage?.refresh() }
         inputBar.visibility = if (index == 0) View.VISIBLE else View.GONE
         val isChat = index == 0
         appBarMenu.visibility = if (isChat) View.VISIBLE else View.INVISIBLE
@@ -1847,6 +1860,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == GalleryPage.REQ_PERM) {
+            galleryPage?.refresh()
+            return
+        }
         if (requestCode != REQ_PERM_STORAGE) return
         val act = pendingStorageAction
         pendingStorageAction = null
@@ -2159,6 +2176,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == GalleryPage.REQ_DELETE) {
+            galleryPage?.refresh()
+            return
+        }
         if (drawPage?.onActivityResult(requestCode, resultCode, data) == true) return
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_PICK_MODEL && resultCode == RESULT_OK) {
