@@ -147,6 +147,43 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         chatPrefs().edit().putBoolean(key, value).apply()
     }
 
+    override fun prefStr(key: String, def: String) = chatPrefs().getString(key, def) ?: def
+    override fun prefPutStr(key: String, value: String) {
+        chatPrefs().edit().putString(key, value).apply()
+    }
+
+    /** Envia el ultimo benchmark (anonimo) al endpoint configurado. */
+    override fun shareBenchmark(endpoint: String, onResult: (String) -> Unit) {
+        val b = lastBench
+        if (b == null) { onResult("Run the benchmark first."); return }
+        val url = endpoint.trim()
+        if (!url.startsWith("http")) { onResult("Set a valid endpoint URL first."); return }
+        scope.launch {
+            val body = JSONObject().apply {
+                put("model", b.model); put("backend", b.backend); put("device", b.device)
+                put("soc", b.soc); put("version", appVersion())
+                put("tps_avg", b.tpsAvg); put("tps_min", b.tpsMin); put("tps_max", b.tpsMax)
+                put("latency_min", b.latMin); put("latency_max", b.latMax); put("tokens", b.tokens)
+            }.toString()
+            val msg = withContext(Dispatchers.IO) {
+                runCatching {
+                    val conn = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        connectTimeout = 10000
+                        readTimeout = 10000
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json")
+                    }
+                    conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                    val code = conn.responseCode
+                    conn.disconnect()
+                    if (code in 200..299) "Shared anonymously (HTTP $code)" else "Server returned HTTP $code"
+                }.getOrElse { "Error: ${it.message ?: it.javaClass.simpleName}" }
+            }
+            onResult(msg)
+        }
+    }
+
     /** Benchmark local: corre N generaciones cortas sobre el modelo cargado y
      *  reporta tok/s, latencia, modelo, backend y dispositivo. No sube nada. */
     override fun runBenchmark(onUpdate: (String) -> Unit) {
@@ -188,6 +225,11 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 .append(" (min ").append("%.1f".format(tps.min()))
                 .append(" / max ").append("%.1f".format(tps.max())).append(")\n")
             sb.append("Latency: min ").append(lat.min()).append(" ms · max ").append(lat.max()).append(" ms")
+            lastBench = BenchStats(
+                model = name, backend = backend, device = Build.MODEL, soc = soc,
+                tpsAvg = tps.average(), tpsMin = tps.min(), tpsMax = tps.max(),
+                latMin = lat.min(), latMax = lat.max(), tokens = lastTokens,
+            )
             onUpdate(sb.toString())
         }
     }
@@ -611,6 +653,13 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     /** .gguf 架构探测结果缓存，避免重复读头部 */
     private val ggufKindCache = HashMap<String, GgufProbe.Kind>()
     private var genJob: Job? = null
+    /** Ultimo resultado del benchmark (para compartir anonimamente). */
+    private data class BenchStats(
+        val model: String, val backend: String, val device: String, val soc: String,
+        val tpsAvg: Double, val tpsMin: Double, val tpsMax: Double,
+        val latMin: Long, val latMax: Long, val tokens: Int,
+    )
+    private var lastBench: BenchStats? = null
     /** Footnote '≈X tok/s' de la última generación (solo render en vivo). */
     private var lastTpsFoot: String? = null
 

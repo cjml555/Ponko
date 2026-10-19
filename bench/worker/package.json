@@ -1,0 +1,9 @@
+{
+  "name": "yumenode-bench",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Anonymous on-device benchmark collector for Yumenode AI",
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

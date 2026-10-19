@@ -34,6 +34,9 @@ interface SettingsHost {
     fun installedAt(): String
     fun prefBool(key: String, def: Boolean): Boolean
     fun prefPutBool(key: String, value: Boolean)
+    fun prefStr(key: String, def: String): String
+    fun prefPutStr(key: String, value: String)
+    fun shareBenchmark(endpoint: String, onResult: (String) -> Unit)
     fun runBenchmark(onUpdate: (String) -> Unit)
 }
 
@@ -181,6 +184,37 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         settingsBody.addView(benchBtn, matchWrap().apply { topMargin = dp(8) })
         settingsBody.addView(benchOut, matchWrap().apply { topMargin = dp(6) })
         settingsBody.addView(host.ui.hintText("Runs short generations on the loaded chat model and reports tokens/sec, latency, model and device. Nothing is uploaded."), matchWrap().apply { topMargin = dp(4) })
+
+        // optional: share anonymously to the endpoint from bench/worker
+        val benchEndpoint = EditText(ctx).apply {
+            setText(host.prefStr("bench_endpoint", ""))
+            hint = "https://…/api/report"
+            textSize = 12f
+            setTextColor(C_TEXT)
+            setHintTextColor(C_SUBTEXT)
+            setBackgroundColor(C_FIELD_BG)
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    host.prefPutStr("bench_endpoint", s?.toString() ?: "")
+                }
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            })
+        }
+        settingsBody.addView(benchEndpoint, matchWrap().apply { topMargin = dp(8) })
+        val shareBtn = host.ui.smallButton("Share anonymously") {}
+        shareBtn.setOnClickListener {
+            shareBtn.isEnabled = false
+            host.shareBenchmark(benchEndpoint.text.toString()) { msg ->
+                benchOut.text = ((benchOut.text ?: "").toString().trimEnd() + "\n\n" + msg).trim()
+                shareBtn.isEnabled = true
+            }
+        }
+        settingsBody.addView(shareBtn, matchWrap().apply { topMargin = dp(6) })
+        settingsBody.addView(host.ui.hintText("Optional: paste the endpoint URL from bench/worker and share the last benchmark anonymously."), matchWrap().apply { topMargin = dp(4) })
 
         // ---- 关于（可折叠，默认展开；展开状态同样记在偏好里）----
         val aboutBody = collapsibleSection(
