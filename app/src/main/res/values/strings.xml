@@ -25,7 +25,7 @@
 <string name="s_022">LoRA accel (LCM-LoRA · few-step)</string>
 <string name="s_023">LoRA ready</string>
 <string name="s_024">LoRA weight</string>
-<string name="s_025">Yumenode AI — del japonés 夢ノード (Yume Node), que significa " nodo de los sueños ". Un chat AI local offline con modelos de lenguaje y estabilidad diffusion. Todos los modelos e inferencias corren en este dispositivo; el historial de chat se almacena solo localmente. Derivado de Ponko (© visitor257, MIT): rebautizado como Yumenode AI y parcialmente refactorizado.</string>
+<string name="s_025">Yumenode AI — from the Japanese 夢ノード (Yume Node), meaning "dream node". An offline local AI chat with language models and stable diffusion. All models and inference run on this device; chat history is stored only locally. Derived from Ponko (© visitor257, MIT): rebranded as Yumenode AI and partially refactored.</string>
 <string name="s_026">\nAfter deleting, LoRA accel on the Draw page stops working.</string>
 <string name="s_028">hf-mirror.com (China mirror)</string>
 <string name="s_029">huggingface.co (official)</string>
@@ -478,8 +478,8 @@
 <string name="s_453">View the NOTICE on GitHub</string>
 
     <!-- Model Downloader UI strings -->
-    <string name="s_454">Descargar modelos libres</string>
-    <string name="s_455">Descargar un modelo compatible con Ponko desde fuentes confiables (Hugging Face mirror, etc.).</string>
+    <string name="s_454">Download models libres</string>
+    <string name="s_455">Download a Yumenode-compatible model from trusted sources (Hugging Face mirror, etc.).</string>
     <string name="s_456">Descargar</string>
     <string name="s_457">Descargando…</string>
     <string name="s_458">Descargado</string>
@@ -487,14 +487,14 @@
     <string name="s_460">Descarga fallida</string>
     <string name="s_461">Descarga incompleta</string>
     <string name="s_462">Ya está descargado</string>
-    <string name="s_463">Descargar modelo</string>
+    <string name="s_463">Download model</string>
     <string name="s_464">Lenguaje</string>
     <string name="s_465">Multimodal (texto + imagen)</string>
     <string name="s_466">Solo texto</string>
     <string name="s_467">GGUF (llama.cpp)</string>
     <string name="s_468">LiteRT-LM (Google)</string>
-    <string name="s_469">Selecciona un modelo para descargar</string>
-    <string name="s_470">Progreso</string>
+    <string name="s_469">Select a model to download</string>
+    <string name="s_470">Progress</string>
 
     <string name="s_471">Draw page failed to initialize:</string>
     <string name="s_472">Select mmproj:</string>
