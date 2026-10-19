@@ -81,36 +81,41 @@ data class YumenodeTheme(
         )
 
         fun dark() = YumenodeTheme(
-            bg = 0xFF15171C.toInt(),
-            bgAlt = 0xFF15171C.toInt(),
-            surface = 0xFF1E2127.toInt(),
-            fieldBg = 0xFF262A32.toInt(),
-            softBtn = 0xFF262A32.toInt(),
-            softBtn2 = 0xFF24272E.toInt(),
-            border = 0xFF343A45.toInt(),
-            chipBg = 0xFF23262E.toInt(),
-            divider = 0x2EFFFFFF,
-            dividerLine = 0xFF2A2E36.toInt(),
-            text = 0xFFE7E9EF.toInt(),
-            subText = 0xFF99A2B1.toInt(),
-            hint = 0xFF6E7683.toInt(),
-            primary = 0xFF4C7DFF.toInt(),
-            primarySoft = 0xFF223056.toInt(),
-            onPrimary = 0xFFFFFFFF.toInt(),
-            thoughtBg = 0xFF1B1E24.toInt(),
-            thoughtText = 0xFF98A1B0.toInt(),
+            // ── 1. Fondos: Azul Noche Absoluto (#020814/#0A0D1A) + Azul Profundo de Red (#1A237E) ──
+            bg = 0xFF020814.toInt(),              // página / scroll (fondo más oscuro)
+            bgAlt = 0xFF0A0D1A.toInt(),           // fondo secundario
+            surface = 0xFF1A237E.toInt(),         // tarjetas, top bar, input bar
+            fieldBg = 0xFF0D1733.toInt(),         // inputs / previews cóncavos
+            softBtn = 0xFF121E42.toInt(),         // botón secundario (sólido)
+            softBtn2 = 0xFF14224A.toInt(),        // botón secundario (outline)
+            border = 0xFF2E4A8C.toInt(),          // bordes / strokes (tinte del Azul Profundo)
+            chipBg = 0xFF111F44.toInt(),          // chip no seleccionado
+            divider = 0x20FFFFFF.toInt(),         // divisor semitransparente
+            dividerLine = 0xFF1A2752.toInt(),     // línea 1px
+            thoughtBg = 0xFF121E42.toInt(),       // burbuja de razonamiento
+            mediaBg = 0xFF0A0D1A.toInt(),         // base de miniaturas
+            scrim = 0x99020814.toInt(),           // overlay del drawer
+            // ── 2. Texto ──
+            text = 0xFFE6E9EF.toInt(),            // principal
+            subText = 0xFF8A96B4.toInt(),          // secundario
+            hint = 0xFF6A7DA9.toInt(),            // placeholder
+            thoughtText = 0xFF9BA7C4.toInt(),     // texto de razonamiento
+            errText = 0xFFFF8A8A.toInt(),         // texto de error
+            // ── 3. Acento: Cyan eléctrico (#00F0FF), Magenta neón (#FF007F)
+            //    (Violeta #9D4EDD está reservado para glow gráfico — futura capa visual) ──
+            primary = 0xFF00F0FF.toInt(),         // cyan — acento / top bar / botones
+            primarySoft = 0xFF002A33.toInt(),     // tinte muy oscuro de cyan (seleccionado)
+            onPrimary = 0xFF001018.toInt(),       // texto sobre cyan (casi negro)
+            switchThumb = 0xFF00F0FF.toInt(),     // thumb del switch = cyan
+            switchTrack = 0xFF0D1733.toInt(),     // track del switch
+            stop = 0xFFFF007F.toInt(),            // magenta — energía / punto caliente
+            statusBar = 0xFF020814.toInt(),       // barra de estado (inmersiva)
+            navBar = 0xFF020814.toInt(),          // barra de navegación
+            // semáforos funcionales (reconocibles)
             ok = 0xFF35C57F.toInt(),
             warn = 0xFFF0A22E.toInt(),
             err = 0xFFFF6B6B.toInt(),
             idle = 0xFF7E8798.toInt(),
-            errText = 0xFFFF8A8A.toInt(),
-            stop = 0xFFD9534F.toInt(),
-            mediaBg = 0xFF22252B.toInt(),
-            scrim = 0x99000000.toInt(),
-            switchTrack = 0xFF23262E.toInt(),
-            switchThumb = 0xFF3B4351.toInt(),
-            statusBar = 0xFF2F6BFF.toInt(),
-            navBar = 0xFF15171C.toInt(),
             isDark = true,
         )
 
