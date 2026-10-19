@@ -541,4 +541,8 @@
 
     <string name="s_508">Could not delete this image</string>
 
+    <string name="s_510">mmproj</string>
+    <string name="s_511">Images</string>
+    <string name="s_513">No models in this category yet</string>
+
 </resources>

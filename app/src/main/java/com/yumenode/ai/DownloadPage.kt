@@ -38,6 +38,15 @@ class DownloadPage(
     private var scrollView: ScrollView? = null
     private var container: LinearLayout? = null
 
+    /** Pestaña activa del downloader. */
+    private var selectedKind = ModelDownloader.ModelKind.CHAT
+    private val kinds = arrayOf(
+        ModelDownloader.ModelKind.CHAT,
+        ModelDownloader.ModelKind.MMPROJ,
+        ModelDownloader.ModelKind.DRAW,
+        ModelDownloader.ModelKind.TAGGER,
+    )
+
     fun build(): View = with(ctx) {
         val sv = ScrollView(ctx).apply {
             clipToPadding = false
@@ -46,6 +55,23 @@ class DownloadPage(
         val card = makeCard()
         card.addView(makePageTitle(ctx.getString(R.string.s_454)))
         card.addView(makeHint(ctx.getString(R.string.s_455)), matchWrap().apply { topMargin = dp(6) })
+
+        val kindSwitch = SegmentedSwitch(
+            ctx,
+            arrayOf(
+                ctx.getString(R.string.s_074),
+                ctx.getString(R.string.s_510),
+                ctx.getString(R.string.s_511),
+                ctx.getString(R.string.s_221),
+            ),
+            pal,
+            kinds.indexOf(selectedKind),
+        )
+        kindSwitch.onChanged = { i ->
+            selectedKind = kinds[i]
+            container?.let { renderList(it) }
+        }
+        card.addView(kindSwitch, matchWrap().apply { topMargin = dp(10) })
 
         val list = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         card.addView(list, matchWrap().apply { topMargin = dp(8) })
@@ -66,7 +92,7 @@ class DownloadPage(
     private fun renderList(container: LinearLayout) = with(ctx) {
 
         container.removeAllViews()
-        val models = ModelDownloader.getAvailableModels()
+        val models = ModelDownloader.getAvailableModels().filter { it.kind == selectedKind }
         for (info in models) {
             val already = ModelDownloader.isModelDownloaded(ctx, info.name)
             val row = LinearLayout(ctx).apply {
@@ -91,10 +117,24 @@ class DownloadPage(
                 setTextColor(C_SUBTEXT)
             }
             val formatBadge = TextView(ctx).apply {
-                text = if (info.supportsThinking) "🧠 ${info.format.displayName}"
-                else info.format.displayName
+                text = when (info.kind) {
+                    ModelDownloader.ModelKind.CHAT ->
+                        if (info.supportsThinking) "🧠 ${info.format.displayName}" else info.format.displayName
+                    ModelDownloader.ModelKind.MMPROJ -> "mmproj"
+                    ModelDownloader.ModelKind.DRAW -> "Stable Diffusion"
+                    ModelDownloader.ModelKind.TAGGER ->
+                        info.remoteName?.substringAfterLast('.')?.uppercase() ?: "ONNX"
+                }
                 textSize = 11f
-                setTextColor(if (info.format == ModelDownloader.ModelFormat.GGUF) 0xFF4CAF50.toInt() else 0xFF2196F3.toInt())
+                setTextColor(
+                    when (info.kind) {
+                        ModelDownloader.ModelKind.CHAT ->
+                            if (info.format == ModelDownloader.ModelFormat.GGUF) 0xFF4CAF50.toInt() else 0xFF2196F3.toInt()
+                        ModelDownloader.ModelKind.MMPROJ -> 0xFF9C27B0.toInt()
+                        ModelDownloader.ModelKind.DRAW -> 0xFFFF7A00.toInt()
+                        ModelDownloader.ModelKind.TAGGER -> 0xFF00BCD4.toInt()
+                    }
+                )
                 background = rounded(Color.WHITE, 4)
                 setPadding(dp(6), dp(2), dp(6), dp(2))
                 gravity = Gravity.CENTER
@@ -236,7 +276,7 @@ class DownloadPage(
             container.addView(itemWrap, matchWrap().apply { topMargin = dp(6) })
         }
         if (models.isEmpty()) {
-            container.addView(makeHint(getString(R.string.s_459)), matchWrap().apply { topMargin = dp(16) })
+            container.addView(makeHint(getString(R.string.s_513)), matchWrap().apply { topMargin = dp(16) })
         }
         }
 }

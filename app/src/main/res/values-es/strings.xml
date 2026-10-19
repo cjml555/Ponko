@@ -541,4 +541,8 @@
 
     <string name="s_508">No se pudo eliminar esta imagen</string>
 
+    <string name="s_510">mmproj</string>
+    <string name="s_511">Imágenes</string>
+    <string name="s_513">Aún no hay modelos en esta categoría</string>
+
 </resources>

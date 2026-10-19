@@ -337,12 +337,61 @@ object ModelDownloader {
     )
 
     /**
+     * Modelos que no son de chat: proyector de visión, difusión y etiquetador.
+     * URLs verificadas contra los repos de Hugging Face (vía el mirror).
+     */
+    private val EXTRA_CATALOG = mapOf(
+        "mmproj-qwen2-vl-2b-f16.gguf" to ModelInfo(
+            name = "mmproj Qwen2-VL 2B f16",
+            description = "Proyector de visión para Qwen2-VL 2B (llama.cpp)",
+            url = "$HF_MIRROR/bartowski/Qwen2-VL-2B-Instruct-GGUF/resolve/main/mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
+            sizeBytes = 1_331_656_192L,
+            format = ModelFormat.GGUF,
+            supportsVision = true,
+            kind = ModelKind.MMPROJ,
+            remoteName = "mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
+        ),
+        "sd15-emaonly-q4_0.gguf" to ModelInfo(
+            name = "Stable Diffusion 1.5 Q4_0",
+            description = "SD 1.5 pruned emaonly - el más ligero para móvil",
+            url = "$HF_MIRROR/second-state/stable-diffusion-v1-5-GGUF/resolve/main/stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf",
+            sizeBytes = 1_566_768_416L,
+            format = ModelFormat.GGUF,
+            supportsVision = false,
+            kind = ModelKind.DRAW,
+            remoteName = "stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf",
+        ),
+        "wd14-moat-onnx" to ModelInfo(
+            name = "WD14 Moat Tagger (ONNX)",
+            description = "Etiquetador Danbooru WD v1.4 - necesita también la lista CSV",
+            url = "$HF_MIRROR/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/model.onnx",
+            sizeBytes = 326_197_340L,
+            format = ModelFormat.GGUF,
+            supportsVision = false,
+            kind = ModelKind.TAGGER,
+            remoteName = "wd14-moat.onnx",
+        ),
+        "wd14-moat-tags" to ModelInfo(
+            name = "WD14 Moat tags (CSV)",
+            description = "Lista de etiquetas selected_tags.csv para el tagger WD14",
+            url = "$HF_MIRROR/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/selected_tags.csv",
+            sizeBytes = 253_906L,
+            format = ModelFormat.GGUF,
+            supportsVision = false,
+            kind = ModelKind.TAGGER,
+            remoteName = "selected_tags.csv",
+        ),
+    )
+
+    private val ALL_MODELS = MODEL_CATALOG + EXTRA_CATALOG
+
+    /**
      * Resuelve un modelo por clave de catálogo o por nombre visible.
      * La UI pasaba `info.name` como clave, lo que hacía fallar la búsqueda.
      */
     private fun resolveInfo(modelKey: String): ModelInfo? =
-        MODEL_CATALOG[modelKey]
-            ?: MODEL_CATALOG.values.firstOrNull { it.name == modelKey || it.displayName == modelKey }
+        ALL_MODELS[modelKey]
+            ?: ALL_MODELS.values.firstOrNull { it.name == modelKey || it.displayName == modelKey }
 
     data class ModelInfo(
         val name: String,
@@ -355,19 +404,33 @@ object ModelDownloader {
         /** El modelo puede emitir razonamiento (compatible con "Thinking mode"). */
         val supportsThinking: Boolean = false,
         val mmprojFile: String? = null,
-        val sha256: String? = null // checksum para verificación de integridad
+        val sha256: String? = null, // checksum para verificación de integridad
+        /** Tipo de modelo: decide la carpeta de destino y la pestaña del downloader. */
+        val kind: ModelKind = ModelKind.CHAT,
+        /** Nombre de archivo remoto cuando no se deriva del nombre visible. */
+        val remoteName: String? = null,
     ) {
         val displayName: String
             get() = "$name (${format.displayName}${quantType?.let { " - $it" } ?: ""})"
 
+        /** Carpeta base de destino según el tipo. */
+        fun baseDir(context: Context): File = when (kind) {
+            ModelKind.CHAT -> File(context.filesDir, MODELS_DIR)
+            ModelKind.MMPROJ -> File(context.filesDir, "mmproj")
+            ModelKind.DRAW -> File(context.filesDir, "draw")
+            ModelKind.TAGGER -> File(context.filesDir, "tagger")
+        }.apply { mkdirs() }
+
         val fileName: String
-            get() = when (format) {
+            get() = remoteName ?: when (format) {
                 ModelFormat.GGUF -> "gguf/${this@ModelInfo.name.lowercase().replace(' ', '-')}.gguf"
                 ModelFormat.LITERTLM -> "litertlm/${this@ModelInfo.name.lowercase().replace(' ', '-')}.litertlm"
             }
 
         val expectedSize: Long get() = sizeBytes
     }
+
+    enum class ModelKind { CHAT, MMPROJ, DRAW, TAGGER }
 
     enum class ModelFormat(val displayName: String) {
         GGUF("GGUF (llama.cpp)"),
@@ -400,7 +463,7 @@ object ModelDownloader {
     /** Obtiene la ruta completa donde se guardará el modelo */
     fun getModelFilePath(context: Context, modelKey: String): String {
         val info = resolveInfo(modelKey) ?: return ""
-        return File(getModelsDir(context), info.fileName).absolutePath
+        return File(info.baseDir(context), info.fileName).absolutePath
     }
 
     /** Obtiene la URL de descarga para un modelo */
@@ -409,7 +472,7 @@ object ModelDownloader {
     }
 
     /** Lista todos los modelos disponibles en el catálogo */
-    fun getAvailableModels(): List<ModelInfo> = MODEL_CATALOG.values.toList()
+    fun getAvailableModels(): List<ModelInfo> = ALL_MODELS.values.toList()
 
     /** Filtra modelos por formato */
     fun getModelsByFormat(format: ModelFormat): List<ModelInfo> =
@@ -434,7 +497,7 @@ object ModelDownloader {
     /** Verifica si un modelo ya está descargado */
     fun isModelDownloaded(context: Context, modelKey: String): Boolean {
         val info = resolveInfo(modelKey) ?: return false
-        val modelFile = File(getModelsDir(context), info.fileName)
+        val modelFile = File(info.baseDir(context), info.fileName)
         return modelFile.exists() && modelFile.length() > info.sizeBytes * EXISTING_FILE_SIZE_RATIO
     }
 
@@ -515,7 +578,7 @@ object ModelDownloader {
         }
 
         cancelled.set(false)
-        val modelsDir = getModelsDir(context)
+        val modelsDir = info.baseDir(context)
         val modelFile = File(modelsDir, info.fileName)
         modelFile.parentFile?.mkdirs()
 

@@ -55,7 +55,7 @@ Yumenode AI ofrece una interfaz de usuario limpia e intuitiva con varias pestañ
 
 **Draw**: Configuración del modelo de dibujo (Stable Diffusion), selección de tipo/archivo `.gguf`, gestión de conjuntos multiarchivo, LoRA, TAESD y el botón de generar.
 
-**Modelos libres**: Descarga modelos gratuitos desde fuentes confiables (mirrors de Hugging Face) directamente a la app.
+**Modelos libres**: Descarga modelos gratuitos desde fuentes confiables (mirrors de Hugging Face) directamente a la app, con **pestañas por tipo**: Chat, mmproj, Imágenes y Etiquetador.
 
 **Galería**: Rejilla de las imágenes guardadas en `Pictures/Yumenode AI`. Visor a pantalla completa con zoom, compartir y eliminar.
 
