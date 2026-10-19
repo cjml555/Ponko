@@ -2,8 +2,7 @@ name = "yumenode-bench"
 main = "src/index.js"
 compatibility_date = "2025-06-01"
 
-# Crea el namespace una vez y pega aquí el id:
-#   npx wrangler kv namespace create BENCH_KV
+# El namespace KV se provisiona automáticamente en el deploy (sin id fijo).
+# Si prefieres uno propio: npx wrangler kv namespace create BENCH_KV  y pega el id.
 [[kv_namespaces]]
 binding = "BENCH_KV"
-id = "REPLACE_WITH_YOUR_KV_ID"
