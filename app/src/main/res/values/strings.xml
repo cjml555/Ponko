@@ -478,19 +478,19 @@
 <string name="s_453">View the NOTICE on GitHub</string>
 
     <!-- Model Downloader UI strings -->
-    <string name="s_454">Download models libres</string>
+    <string name="s_454">Free models</string>
     <string name="s_455">Download a Yumenode-compatible model from trusted sources (Hugging Face mirror, etc.).</string>
-    <string name="s_456">Descargar</string>
-    <string name="s_457">Descargando…</string>
-    <string name="s_458">Descargado</string>
-    <string name="s_459">No hay conexión a internet</string>
-    <string name="s_460">Descarga fallida</string>
-    <string name="s_461">Descarga incompleta</string>
-    <string name="s_462">Ya está descargado</string>
+    <string name="s_456">Download</string>
+    <string name="s_457">Downloading…</string>
+    <string name="s_458">Downloaded</string>
+    <string name="s_459">No internet connection</string>
+    <string name="s_460">Download failed</string>
+    <string name="s_461">Download incomplete</string>
+    <string name="s_462">Already downloaded</string>
     <string name="s_463">Download model</string>
-    <string name="s_464">Lenguaje</string>
-    <string name="s_465">Multimodal (texto + imagen)</string>
-    <string name="s_466">Solo texto</string>
+    <string name="s_464">Language</string>
+    <string name="s_465">Multimodal (text + image)</string>
+    <string name="s_466">Text only</string>
     <string name="s_467">GGUF (llama.cpp)</string>
     <string name="s_468">LiteRT-LM (Google)</string>
     <string name="s_469">Select a model to download</string>
@@ -499,5 +499,20 @@
     <string name="s_471">Draw page failed to initialize:</string>
     <string name="s_472">Select mmproj:</string>
     <string name="s_473">Downloading…</string>
+
+    <string name="s_474">Benchmark</string>
+    <string name="s_475">Run benchmark</string>
+    <string name="s_476">Running…</string>
+    <string name="s_477">Share anonymously</string>
+    <string name="s_478">Runs short generations on the loaded chat model and reports tokens/sec, latency, model and device. Nothing is uploaded.</string>
+    <string name="s_479">Optional: custom endpoint. Defaults to the Yumenode bench Worker; paste another URL to override.</string>
+    <string name="s_480">Load a chat model first.</string>
+    <string name="s_481">The model is busy. Try again in a moment.</string>
+    <string name="s_482">Run the benchmark first.</string>
+    <string name="s_483">Set a valid endpoint URL first.</string>
+    <string name="s_484">Shared anonymously (HTTP %1$d)</string>
+    <string name="s_485">Server returned HTTP %1$d</string>
+    <string name="s_486">Model: %1$s\nBackend: %2$s\nDevice: %3$s · %4$s\nTokens (est./run): %5$d\ntok/s: avg %6$s (min %7$s / max %8$s)\nLatency: min %9$d ms · max %10$d ms</string>
+    <string name="s_487">Running %1$d/%2$d…</string>
 
 </resources>

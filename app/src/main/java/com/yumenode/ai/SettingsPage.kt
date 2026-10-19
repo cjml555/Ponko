@@ -165,25 +165,25 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         settingsBody.addView(host.ui.hintText(getString(R.string.s_446)), matchWrap().apply { topMargin = dp(4) })
 
         // ---- Benchmark (local only) ----
-        settingsBody.addView(host.ui.subTitle("Benchmark"), matchWrap().apply { topMargin = dp(14) })
+        settingsBody.addView(host.ui.subTitle(getString(R.string.s_474)), matchWrap().apply { topMargin = dp(14) })
         val benchOut = host.ui.hintText("").apply { setTextColor(C_TEXT) }
         var benchRunning = false
-        val benchBtn = host.ui.actionButton("Run benchmark") {}
+        val benchBtn = host.ui.actionButton(getString(R.string.s_475)) {}
         benchBtn.setOnClickListener {
             if (benchRunning) return@setOnClickListener
             benchRunning = true
-            benchBtn.text = "Running…"
+            benchBtn.text = getString(R.string.s_476)
             benchBtn.isEnabled = false
             host.runBenchmark { text ->
                 benchOut.text = text
                 benchRunning = false
-                benchBtn.text = "Run benchmark"
+                benchBtn.text = getString(R.string.s_475)
                 benchBtn.isEnabled = true
             }
         }
         settingsBody.addView(benchBtn, matchWrap().apply { topMargin = dp(8) })
         settingsBody.addView(benchOut, matchWrap().apply { topMargin = dp(6) })
-        settingsBody.addView(host.ui.hintText("Runs short generations on the loaded chat model and reports tokens/sec, latency, model and device. Nothing is uploaded."), matchWrap().apply { topMargin = dp(4) })
+        settingsBody.addView(host.ui.hintText(getString(R.string.s_478)), matchWrap().apply { topMargin = dp(4) })
 
         // optional: share anonymously to the endpoint from bench/worker
         val benchEndpoint = EditText(ctx).apply {
@@ -205,7 +205,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             })
         }
         settingsBody.addView(benchEndpoint, matchWrap().apply { topMargin = dp(8) })
-        val shareBtn = host.ui.smallButton("Share anonymously") {}
+        val shareBtn = host.ui.smallButton(getString(R.string.s_477)) {}
         shareBtn.setOnClickListener {
             shareBtn.isEnabled = false
             host.shareBenchmark(benchEndpoint.text.toString()) { msg ->
@@ -214,7 +214,7 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
             }
         }
         settingsBody.addView(shareBtn, matchWrap().apply { topMargin = dp(6) })
-        settingsBody.addView(host.ui.hintText("Optional: custom endpoint. Defaults to the Yumenode bench Worker; paste another URL to override."), matchWrap().apply { topMargin = dp(4) })
+        settingsBody.addView(host.ui.hintText(getString(R.string.s_479)), matchWrap().apply { topMargin = dp(4) })
 
         // ---- 关于（可折叠，默认展开；展开状态同样记在偏好里）----
         val aboutBody = collapsibleSection(

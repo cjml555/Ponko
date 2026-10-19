@@ -155,9 +155,9 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     /** Envia el ultimo benchmark (anonimo) al endpoint configurado. */
     override fun shareBenchmark(endpoint: String, onResult: (String) -> Unit) {
         val b = lastBench
-        if (b == null) { onResult("Run the benchmark first."); return }
+        if (b == null) { onResult(getString(R.string.s_482)); return }
         val url = endpoint.trim().ifBlank { DEFAULT_BENCH_ENDPOINT }
-        if (!url.startsWith("http")) { onResult("Set a valid endpoint URL first."); return }
+        if (!url.startsWith("http")) { onResult(getString(R.string.s_483)); return }
         scope.launch {
             val body = JSONObject().apply {
                 put("model", b.model); put("backend", b.backend); put("device", b.device)
@@ -177,7 +177,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                     val code = conn.responseCode
                     conn.disconnect()
-                    if (code in 200..299) "Shared anonymously (HTTP $code)" else "Server returned HTTP $code"
+                    if (code in 200..299) getString(R.string.s_484, code) else getString(R.string.s_485, code)
                 }.getOrElse { "Error: ${it.message ?: it.javaClass.simpleName}" }
             }
             onResult(msg)
@@ -187,8 +187,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     /** Benchmark local: corre N generaciones cortas sobre el modelo cargado y
      *  reporta tok/s, latencia, modelo, backend y dispositivo. No sube nada. */
     override fun runBenchmark(onUpdate: (String) -> Unit) {
-        if (!ChatCore.isReady()) { onUpdate("Load a chat model first."); return }
-        if (ChatCore.busy) { onUpdate("The model is busy. Try again in a moment."); return }
+        if (!ChatCore.isReady()) { onUpdate(getString(R.string.s_480)); return }
+        if (ChatCore.busy) { onUpdate(getString(R.string.s_481)); return }
         scope.launch {
             val prompt = "Write a short, coherent paragraph about the sea."
             val runs = 3
@@ -196,7 +196,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             val lat = ArrayList<Long>()
             var lastTokens = 0
             for (i in 1..runs) {
-                onUpdate("Running $i/$runs…")
+                onUpdate(getString(R.string.s_487, i, runs))
                 val t0 = SystemClock.uptimeMillis()
                 val out = try {
                     ChatCore.generate(listOf(ChatCore.Msg("user", prompt)), 0.7f, 128) { }
@@ -216,21 +216,15 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                 else -> "?"
             }
             val soc = if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE
-            val sb = StringBuilder()
-            sb.append("Model: ").append(name).append('\n')
-            sb.append("Backend: ").append(backend).append('\n')
-            sb.append("Device: ").append(Build.MODEL).append(" · ").append(soc).append('\n')
-            sb.append("Tokens (est./run): ").append(lastTokens).append('\n')
-            sb.append("tok/s: avg ").append("%.1f".format(tps.average()))
-                .append(" (min ").append("%.1f".format(tps.min()))
-                .append(" / max ").append("%.1f".format(tps.max())).append(")\n")
-            sb.append("Latency: min ").append(lat.min()).append(" ms · max ").append(lat.max()).append(" ms")
+            val tpsAvg = "%.1f".format(tps.average())
+            val tpsMin = "%.1f".format(tps.min())
+            val tpsMax = "%.1f".format(tps.max())
             lastBench = BenchStats(
                 model = name, backend = backend, device = Build.MODEL, soc = soc,
                 tpsAvg = tps.average(), tpsMin = tps.min(), tpsMax = tps.max(),
                 latMin = lat.min(), latMax = lat.max(), tokens = lastTokens,
             )
-            onUpdate(sb.toString())
+            onUpdate(getString(R.string.s_486, name, backend, Build.MODEL, soc, lastTokens, tpsAvg, tpsMin, tpsMax, lat.min(), lat.max()))
         }
     }
 
