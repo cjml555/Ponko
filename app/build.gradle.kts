@@ -15,8 +15,8 @@ android {
         applicationId = "com.yumenode.ai"
         minSdk = 28
         targetSdk = 36
-        versionCode = 10200
-        versionName = "1.2.0"
+        versionCode = 10201
+        versionName = "1.2.1"
         ndk {
             // LiteRT-LM 与 llama.cpp 的 native 都只跑 arm64 真机，去掉 x86_64 可减小 APK
             abiFilters += "arm64-v8a"
