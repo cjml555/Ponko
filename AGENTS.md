@@ -76,3 +76,20 @@ app/src/main/res/        strings en values/ (default inglés) + values-zh/
 2. Si aplica a UI/runtime: instalar y revisar
    `adb logcat -d | grep -iE "FATAL|AndroidRuntime|ResourceNotFound"`.
 3. No reportes como "hecho" algo que no compiló o no se probó.
+
+## API local compatible con OpenAI (para agentes)
+
+La app puede servir el modelo de chat **cargado en el dispositivo** por HTTP, con
+formato OpenAI. Esto permite apuntar un agente local (OpenCode, Hermes, Codex, etc.)
+al modelo del teléfono:
+
+- `GET /health`, `GET /v1/models`, `POST /v1/chat/completions` (soporta `stream` SSE).
+- Puerto por defecto **8080** (configurable en la app).
+- Auth opcional `Authorization: Bearer <key>`; la key se genera en
+  **Models → API → New key**. Sin key, no hay comprobación (solo LAN de confianza).
+- Requiere: modelo de chat cargado + **Start service** en Models → API.
+- Config de agente (ej. OpenCode): provider `@ai-sdk/openai-compatible` con
+  `baseURL: "http://<ip-del-telefono>:8080/v1"` y el id de modelo que devuelve
+  `/v1/models`.
+- Limitación: el servidor atiende **una petición a la vez** (responde 429 si está
+  ocupado); los modelos pequeños (1B) son débiles para trabajo agéntico.
