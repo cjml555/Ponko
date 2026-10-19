@@ -47,6 +47,9 @@ class SegmentedSwitch @JvmOverloads constructor(
     private var pos = index.toFloat()
     private var downRawX = 0f
     private var downPos = 0f
+    private var downRawY = 0f
+    private var draggingHoriz = false
+    private val touchSlop = android.view.ViewConfiguration.get(context).scaledTouchSlop
     private var anim: ValueAnimator? = null
 
     /**
@@ -115,25 +118,44 @@ class SegmentedSwitch @JvmOverloads constructor(
         val sw = stepWidth()
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                parent?.requestDisallowInterceptTouchEvent(true)
                 anim?.cancel()
                 // 上一段吸附还没播完就又开始拖：先把它的回调补发掉，别把那次选择吞了
                 flushNotify()
                 downRawX = event.rawX
+                downRawY = event.rawY
+                draggingHoriz = false
                 pos = ((event.x - innerPad) / sw - 0.5f).coerceIn(0f, (labels.size - 1).toFloat())
                 downPos = pos
                 invalidate()
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
-                pos = (downPos + (event.rawX - downRawX) / sw).coerceIn(0f, (labels.size - 1).toFloat())
-                invalidate()
+                val dx = event.rawX - downRawX
+                val dy = event.rawY - downRawY
+                // Solo nos quedamos el gesto si es horizontal: un scroll vertical debe
+                // seguir desplazando la pagina aunque empiece encima del switch.
+                if (!draggingHoriz && kotlin.math.abs(dx) > kotlin.math.abs(dy) + touchSlop) {
+                    draggingHoriz = true
+                    parent?.requestDisallowInterceptTouchEvent(true)
+                }
+                if (draggingHoriz) {
+                    pos = (downPos + dx / sw).coerceIn(0f, (labels.size - 1).toFloat())
+                    invalidate()
+                }
                 return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP -> {
                 parent?.requestDisallowInterceptTouchEvent(false)
-                performClick()
+                if (!draggingHoriz) performClick()
                 snapTo(pos.roundToInt().coerceIn(0, labels.size - 1))
+                draggingHoriz = false
+                return true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                // La pagina se quedo el gesto (scroll vertical): no cambiar de opcion.
+                parent?.requestDisallowInterceptTouchEvent(false)
+                draggingHoriz = false
+                snapTo(index)
                 return true
             }
         }
