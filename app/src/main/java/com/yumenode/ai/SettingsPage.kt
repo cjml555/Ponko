@@ -38,6 +38,8 @@ interface SettingsHost {
     fun prefPutStr(key: String, value: String)
     fun shareBenchmark(endpoint: String, onResult: (String) -> Unit)
     fun runBenchmark(onUpdate: (String) -> Unit)
+    fun setAppLanguage(tag: String?)
+    fun currentAppLanguage(): String?
 }
 
 /**
@@ -163,6 +165,24 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
         // 唯一一条保留的说明：.litertlm 走 Google LiteRT-LM，该库没有线程数参数，
         // 不受这项控制。不写清的话，用户会以为是 bug（这条 2026-10-13 由用户要求加回）。
         settingsBody.addView(host.ui.hintText(getString(R.string.s_446)), matchWrap().apply { topMargin = dp(4) })
+
+        // ---- Language ----
+        settingsBody.addView(host.ui.subTitle(getString(R.string.s_488)), matchWrap().apply { topMargin = dp(14) })
+        val curLang = host.currentAppLanguage()
+        val langSwitch = SegmentedSwitch(
+            ctx,
+            arrayOf(getString(R.string.s_489), getString(R.string.s_490), getString(R.string.s_491)),
+            host.palette,
+            when (curLang) { "en" -> 1; "es" -> 2; else -> 0 },
+        )
+        var langBusy = false
+        langSwitch.onChanged = { i ->
+            if (!langBusy) {
+                langBusy = true
+                host.setAppLanguage(when (i) { 1 -> "en"; 2 -> "es"; else -> null })
+            }
+        }
+        settingsBody.addView(langSwitch, matchWrap().apply { topMargin = dp(8) })
 
         // ---- Benchmark (local only) ----
         settingsBody.addView(host.ui.subTitle(getString(R.string.s_474)), matchWrap().apply { topMargin = dp(14) })

@@ -515,4 +515,9 @@
     <string name="s_486">Model: %1$s\nBackend: %2$s\nDevice: %3$s · %4$s\nTokens (est./run): %5$d\ntok/s: avg %6$s (min %7$s / max %8$s)\nLatency: min %9$d ms · max %10$d ms</string>
     <string name="s_487">Running %1$d/%2$d…</string>
 
+    <string name="s_488">Language</string>
+    <string name="s_489">System</string>
+    <string name="s_490">English</string>
+    <string name="s_491">Español</string>
+
 </resources>

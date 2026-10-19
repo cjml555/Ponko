@@ -186,6 +186,38 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
 
     /** Benchmark local: corre N generaciones cortas sobre el modelo cargado y
      *  reporta tok/s, latencia, modelo, backend y dispositivo. No sube nada. */
+    private var lastLocales: android.os.LocaleList? = null
+
+    override fun currentAppLanguage(): String? =
+        if (Build.VERSION.SDK_INT >= 33) currentAppLocale33()
+        else prefStr(KEY_APP_LANG, "").takeIf { it.isNotBlank() }
+
+    private fun currentAppLocale33(): String? {
+        val ls = getSystemService(android.app.LocaleManager::class.java).applicationLocales
+        return if (ls.isEmpty) null else ls[0].toLanguageTag().substringBefore('-')
+    }
+
+    override fun setAppLanguage(tag: String?) {
+        val t = tag?.trim().orEmpty()
+        prefPutStr(KEY_APP_LANG, t)
+        if (Build.VERSION.SDK_INT >= 33) {
+            applyAppLocale33(t)
+        } else {
+            val cfg = Configuration(resources.configuration)
+            cfg.setLocale(if (t.isEmpty()) java.util.Locale.getDefault() else java.util.Locale.forLanguageTag(t))
+            @Suppress("DEPRECATION")
+            resources.updateConfiguration(cfg, resources.displayMetrics)
+            applyThemeInPlace()
+        }
+    }
+
+    private fun applyAppLocale33(tag: String) {
+        val lm = getSystemService(android.app.LocaleManager::class.java)
+        lm.applicationLocales =
+            if (tag.isEmpty()) android.os.LocaleList.getEmptyLocaleList()
+            else android.os.LocaleList.forLanguageTags(tag)
+    }
+
     override fun runBenchmark(onUpdate: (String) -> Unit) {
         if (!ChatCore.isReady()) { onUpdate(getString(R.string.s_480)); return }
         if (ChatCore.busy) { onUpdate(getString(R.string.s_481)); return }
@@ -800,6 +832,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         themeManager.applyThemeInPlace()
         setTheme(if (themeManager.pal.isDark) R.style.AppTheme_Dark else R.style.AppTheme)
         super.onCreate(savedInstanceState)
+        lastLocales = resources.configuration.locales
         markwonFull = Markwon.builder(this)
             .usePlugin(TablePlugin.create(this))
             .usePlugin(StrikethroughPlugin.create())
@@ -868,9 +901,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         /** manifest 里声明了 uiMode，系统切深浅色不会自动重建，这里手动跟上。 */
         override fun onConfigurationChanged(newConfig: Configuration) {
             super.onConfigurationChanged(newConfig)
-            if (themeManager.onConfigurationChanged(newConfig)) {
-                applyThemeInPlace()
-            }
+            val themeChanged = themeManager.onConfigurationChanged(newConfig)
+            val localeChanged = lastLocales != newConfig.locales
+            lastLocales = newConfig.locales
+            if (themeChanged || localeChanged) applyThemeInPlace()
         }
 
     /** 崩溃自捕获：Java/ART 层异常（含 UnsatisfiedLinkError）写进文件，下次启动可见。 */
@@ -1030,7 +1064,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         switchTab(0)
         // 主题切换导致的重建：回到重建前那一页（一次性，正常启动不受影响）
         val restoreTab = chatPrefs().getInt("restoreTab", -1)
-        if (restoreTab in 0..3) {
+        if (restoreTab in 0..4) {
             chatPrefs().edit().remove("restoreTab").apply()
             switchTab(restoreTab)
         }
@@ -1427,7 +1461,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             Triple("🧠", getString(R.string.s_124), 1),
             Triple("🎨", getString(R.string.s_150), 2),
             Triple("⬇️", getString(R.string.s_454), 3),
-            Triple("ℹ️", getString(R.string.s_048), 4),
+            Triple("⚙️", getString(R.string.s_381), 4),
         )
         for ((icon, label, idx) in items) {
             val item = LinearLayout(this).apply {

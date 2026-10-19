@@ -2,7 +2,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg) ![Release](https://img.shields.io/github/v/release/cjml555/Yumenode-AI?label=release&color=success) ![Platform](https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white) ![minSdk](https://img.shields.io/badge/minSdk-28-orange.svg) ![ABI](https://img.shields.io/badge/ABI-arm64--v8a-lightgrey.svg) ![Offline](https://img.shields.io/badge/offline-no%20telemetry-success.svg)
 
-> **Yumenode AI** — "Yume" (夢, *sueño*) + "Nodo" (*node*). Una aplicación Android que combina la magia de los sueños con la potencia de la inteligencia artificial. Totalmente offline, sin telemetría, sin cuenta.
+> **Yumenode AI** — "Yume" (夢, *sueño*) + "Nodo" (*node*). Una aplicación Android que combina la magia de los sueños con la potencia de la inteligencia artificial. Totalmente offline, sin telemetría automática y sin cuenta: la app nunca envía datos por sí sola. El único envío opcional es el benchmark que tú decides compartir de forma anónima.
 
 ---
 
@@ -26,7 +26,8 @@ Todo sin necesidad de conexión a internet (excepto para descargar modelos manua
 | **Etiquetado automático** | Modelos ONNX (familia WD14) para extraer etiquetas de imágenes |
 | **Servidor API** | Endpoints compatibles con OpenAI (`/v1/chat/completions`, `/v1/images/generations`, `/v1/models`) |
 | **Streaming** | Salida token por token con renderizado Markdown en tiempo real |
-| **Offline-first** | Sin telemetría, sin cuenta, sin análisis de datos |
+| **Offline-first** | Sin telemetría automática ni cuenta; nada sale del dispositivo salvo lo que tú decidas |
+| **Benchmark** | Mide tok/s, latencia y modelo cargado; resultado local con envío anónimo opcional |
 
 ### 📸 Capturas de Pantalla
 
@@ -39,8 +40,8 @@ Yumenode AI ofrece una interfaz de usuario limpia e intuitiva con varias pestañ
     <td align="center"><img src="draw_tab_thumb.png" width="220" alt="Pestaña Draw"><br><b>Draw</b></td>
   </tr>
   <tr>
-    <td align="center"><img src="download_tab_thumb.png" width="220" alt="Pestaña Download"><br><b>Download</b></td>
-    <td align="center"><img src="about_tab_thumb.png" width="220" alt="Pestaña About"><br><b>About</b></td>
+    <td align="center"><img src="download_tab_thumb.png" width="220" alt="Pestaña Modelos libres"><br><b>Modelos libres</b></td>
+    <td align="center"><img src="about_tab_thumb.png" width="220" alt="Pestaña Ajustes"><br><b>Ajustes</b></td>
     <td align="center"></td>
   </tr>
 </table>
@@ -51,9 +52,9 @@ Yumenode AI ofrece una interfaz de usuario limpia e intuitiva con varias pestañ
 
 **Draw**: Configuración del modelo de dibujo (Stable Diffusion), selección de tipo/archivo `.gguf`, gestión de conjuntos multiarchivo, LoRA, TAESD y el botón de generar.
 
-**Download**: Descarga modelos gratuitos desde fuentes confiables (mirrors de Hugging Face) directamente a la app.
+**Modelos libres**: Descarga modelos gratuitos desde fuentes confiables (mirrors de Hugging Face) directamente a la app.
 
-**About**: Información de la aplicación con versión, créditos, licencias y componentes de terceros.
+**Ajustes**: Tema, idioma (Sistema / Inglés / Español), hilos de CPU, benchmark, endpoint personalizado e información de la app (versión, créditos, licencias y componentes de terceros).
 
 ### 🔄 Tipos de Workflow Soportados
 
@@ -117,12 +118,24 @@ Yumenode AI soporta varios flujos de trabajo integrados:
 
 ### 🌓 Temas
 
-Tres modos de tema en "Acerca de → Configuración":
+Tres modos de tema en **Ajustes → Tema**:
 - **Brillante** — forzado
 - **Oscuro** — forzado
 - **Sistema** — sigue el tema del sistema
 
 Los colores del UI incluyen: fondos, tarjetas, inputs, botones, diálogos, barra de estado y barra de navegación — todo sigue el tema sin reiniciar la app.
+
+El idioma se cambia en **Ajustes → Idioma** (Sistema, Inglés o Español) y se aplica al instante, sin reiniciar y sin perder el modelo cargado.
+
+### 🔬 Benchmark
+
+En **Ajustes → Benchmark** puedes medir el rendimiento real del modelo de chat cargado: ejecuta generaciones cortas y muestra **tokens/segundo** (promedio, mínimo y máximo), latencia, modelo, backend y dispositivo. Todo se calcula y se muestra **en el dispositivo**.
+
+**¿Es telemetría?** No. La app **no recopila ni envía nada automáticamente**. El benchmark es local y solo sale del teléfono si tú pulsas **"Compartir anónimamente"**, que envía únicamente: modelo, backend, dispositivo, SoC, versión, tok/s, latencia y número de tokens. **No se envían identificadores, IPs, prompts, imágenes ni archivos.**
+
+Los resultados agregados son públicos en el dashboard: https://yumenode-bench.cjml555.workers.dev
+
+El endpoint por defecto apunta a ese Worker; en Ajustes puedes pegar otro endpoint para enviar tus propias métricas o dejarlo sin usar.
 
 ---
 
@@ -188,7 +201,7 @@ powershell -File tools/build-release.ps1
 - El dibujo es CPU-only por defecto; GPU (Vulkan) no está validada en dispositivo real.
 - El Tagger se carga bajo demanda (consume cientos de MB).
 - Límite: 4 imágenes y 2 archivos por mensaje.
-- Sin conexión: sin internet excepto descarga manual de modelos/LoRA.
+- Sin conexión: sin internet excepto descarga manual de modelos/LoRA y el envío opcional del benchmark.
 - PDF escaneado (solo imagen) no extrae texto.
 
 ---

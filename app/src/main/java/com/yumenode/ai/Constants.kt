@@ -33,3 +33,4 @@ internal const val KEY_CHAT_THINK = "chatThink"
 // ---- Benchmark: endpoint por defecto (hardcoded) + override en Ajustes ----
 internal const val DEFAULT_BENCH_ENDPOINT = "https://yumenode-bench.cjml555.workers.dev/api/report"
 internal const val KEY_BENCH_ENDPOINT = "bench_endpoint"
+internal const val KEY_APP_LANG = "appLang"

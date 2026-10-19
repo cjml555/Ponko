@@ -67,6 +67,14 @@ class SegmentedSwitch @JvmOverloads constructor(
 
     private fun stepWidth(): Float = (width - innerPad * 2f) / labels.size.toFloat()
 
+    /** 选中档文字色：按滑块亮度取深/浅色，避免同色（如深色主题 cian sobre cian）不可见 */
+    private fun onThumbText(): Int {
+        val c = pal.switchThumb
+        val lum = (0.299 * android.graphics.Color.red(c) + 0.587 * android.graphics.Color.green(c) +
+            0.114 * android.graphics.Color.blue(c)) / 255.0
+        return if (lum > 0.55) 0xFF07101F.toInt() else 0xFFFFFFFF.toInt()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val h = trackHeight
@@ -95,7 +103,7 @@ class SegmentedSwitch @JvmOverloads constructor(
         val baseline = h / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
         for (i in 0 until n) {
             val selected = i == near
-            textPaint.color = if (selected) pal.primary else pal.subText
+            textPaint.color = if (selected) onThumbText() else pal.subText
             textPaint.typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             val cx = innerPad + i * sw + sw / 2f
             canvas.drawText(labels[i], cx, baseline, textPaint)
