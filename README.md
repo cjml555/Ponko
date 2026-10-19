@@ -4,6 +4,8 @@
 
 > **Yumenode AI** — "Yume" (夢, *sueño*) + "Nodo" (*node*). Una aplicación Android que combina la magia de los sueños con la potencia de la inteligencia artificial. Totalmente offline, sin telemetría automática y sin cuenta: la app nunca envía datos por sí sola. El único envío opcional es el benchmark que tú decides compartir de forma anónima.
 
+> 🌐 **Sitio web**: [cjml555.github.io/Yumenode-AI](https://cjml555.github.io/Yumenode-AI/) — presentación de la app y benchmark en vivo (tabla y ranking por tok/s).
+
 ---
 
 ## 📖 Descripción Detallada
