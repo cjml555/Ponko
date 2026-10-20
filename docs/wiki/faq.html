@@ -34,8 +34,11 @@ recomendar 4). Puedes subirlo hasta el total en <strong>Ajustes → Hilos de CPU
 <strong>Ajustes → Dispositivo</strong> ves el SoC, núcleos, RAM, Vulkan y GLES reales del equipo.</p>
 
 <h2>¿Puedo usar la GPU?</h2>
-<p>Hay backend Vulkan para dibujo, pero no está validado en dispositivos reales; si falla, cae a CPU. El chat
-GGUF es solo CPU.</p>
+<p>El <strong>dibujo</strong> tiene backend Vulkan compilado, pero no está validado en hardware real; si falla, cae a
+CPU. El <strong>chat GGUF</strong> es solo CPU: probamos la variante OpenCL del binding en un Snapdragon 6 Gen 1
+(Adreno 619) y el compilador del driver (<code>libllvm-qcom.so</code>) hace <strong>SIGSEGV</strong> al compilar los
+kernels de ggml, así que no se puede habilitar sin aislar el proceso. Los modelos <code>.litertlm</code> sí pueden
+usar la GPU de LiteRT-LM, con fallback automático.</p>
 
 <h2>¿Y la NPU?</h2>
 <p>No implementada todavía. Es dependiente del fabricante (Qualcomm Hexagon, etc.), así que requiere trabajo

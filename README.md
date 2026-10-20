@@ -205,7 +205,7 @@ powershell -File tools/build-release.ps1
 ## 🧩 Limitaciones Conocidas
 
 - El contexto de chat predeterminado es 4096 tokens (ajustable en la página de modelos).
-- Chat `.gguf` es **solo CPU** (el binding no incluye GPU).
+- Chat `.gguf` es **solo CPU**. La variante OpenCL del binding existe, pero en Adreno 619 (SM6450) el driver de Qualcomm (`libllvm-qcom.so`) hace **SIGSEGV** al compilar los kernels de `ggml`: probado en dispositivo, no es viable sin aislar el proceso.
 - El dibujo es CPU-only por defecto; GPU (Vulkan) no está validada en dispositivo real.
 - El Tagger se carga bajo demanda (consume cientos de MB).
 - Límite: 4 imágenes y 2 archivos por mensaje.
