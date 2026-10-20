@@ -552,4 +552,6 @@
     <string name="s_519">Recommended: %1$d (big cores)</string>
     <string name="s_521">NPU: not supported yet - it needs the chipset vendor SDK (for example Qualcomm QNN).</string>
 
+    <string name="s_522">LoRA</string>
+    <string name="s_523">Distilled model: %1$d steps · CFG 1</string>
 </resources>

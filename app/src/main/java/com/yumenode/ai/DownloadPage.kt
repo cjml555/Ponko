@@ -45,6 +45,7 @@ class DownloadPage(
         ModelDownloader.ModelKind.MMPROJ,
         ModelDownloader.ModelKind.DRAW,
         ModelDownloader.ModelKind.TAGGER,
+        ModelDownloader.ModelKind.LORA,
     )
 
     fun build(): View = with(ctx) {
@@ -63,6 +64,7 @@ class DownloadPage(
                 ctx.getString(R.string.s_510),
                 ctx.getString(R.string.s_511),
                 ctx.getString(R.string.s_221),
+                ctx.getString(R.string.s_522),
             ),
             pal,
             kinds.indexOf(selectedKind),
@@ -124,6 +126,7 @@ class DownloadPage(
                     ModelDownloader.ModelKind.DRAW -> "Stable Diffusion"
                     ModelDownloader.ModelKind.TAGGER ->
                         info.remoteName?.substringAfterLast('.')?.uppercase() ?: "ONNX"
+                    ModelDownloader.ModelKind.LORA -> "LoRA"
                 }
                 textSize = 11f
                 setTextColor(
@@ -133,6 +136,7 @@ class DownloadPage(
                         ModelDownloader.ModelKind.MMPROJ -> 0xFF9C27B0.toInt()
                         ModelDownloader.ModelKind.DRAW -> 0xFFFF7A00.toInt()
                         ModelDownloader.ModelKind.TAGGER -> 0xFF00BCD4.toInt()
+                        ModelDownloader.ModelKind.LORA -> 0xFFE91E63.toInt()
                     }
                 )
                 background = rounded(Color.WHITE, 4)

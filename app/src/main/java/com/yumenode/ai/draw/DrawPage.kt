@@ -1410,6 +1410,11 @@ class DrawPage(
         loraFile = f
         prefs().edit().putString("selLora", f.name).apply()
         refreshLoraHint()
+        // Una LoRA de aceleracion (Hyper-SD / LCM / Lightning) cambia los pasos utiles:
+        // aplicamos el preset de su familia para no generar con 20 pasos.
+        runCatching {
+            applyDistilledPreset(f.name)?.let { n -> c.toast(c.getString(R.string.s_523, n), short = true) }
+        }
     }
 
     /** 供「模型」页展示的 LoRA 状态 */
@@ -1856,6 +1861,24 @@ class DrawPage(
             .listFiles { f -> f.isFile && f.name.endsWith(".gguf", ignoreCase = true) }
             ?.sortedByDescending { it.lastModified() } ?: emptyList()
 
+
+    /**
+     * Los modelos destilados (Turbo / Lightning / Hyper / LCM / SDXS) estan pensados para
+     * 1-4 pasos con CFG 1. Con los valores por defecto (20 pasos / CFG 7) tardan ~5x mas
+     * y el resultado sale peor: el distilado se pasa de refinamiento.
+     * Devuelve los pasos aplicados, o null si el modelo no es de esa familia.
+     */
+    private fun applyDistilledPreset(vararg names: String?): Int? {
+        if (!::stepsEdit.isInitialized || !::cfgEdit.isInitialized) return null
+        val steps = DistilledPresets.stepsFor(*names) ?: return null
+        val curSteps = stepsEdit.text.toString().toIntOrNull()
+        val curCfg = cfgEdit.text.toString().toFloatOrNull()
+        if (curSteps == steps && curCfg != null && kotlin.math.abs(curCfg - 1f) < 0.01f) return null
+        stepsEdit.setText(steps.toString())
+        cfgEdit.setText("1")
+        return steps
+    }
+
     private suspend fun loadSet(set: ModelSet?): String? {
         if (set == null) {
             statusText.post { statusText.text = c.getString(R.string.s_114) }
@@ -1950,6 +1973,14 @@ class DrawPage(
             }
             statusText.post { statusText.text = summary }
             statusText.post { refreshQuantText() }
+            // Modelo destilado -> pasos/CFG de su familia (antes de sincronizar con el motor)
+            statusText.post {
+                runCatching {
+                    applyDistilledPreset(set.name, mainModel?.name)?.let { n ->
+                        c.toast(c.getString(R.string.s_523, n), short = true)
+                    }
+                }
+            }
             // 参数快照同步给 API（此时控件都已建好）
             statusText.post { runCatching { syncDrawCore() } }
             runCatching { stageFile.delete() }

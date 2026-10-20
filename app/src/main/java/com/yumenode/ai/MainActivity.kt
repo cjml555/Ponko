@@ -786,7 +786,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         tabSettings = buildSettingsPage()
         downloadPage = DownloadPage(
             this, { ui.card() }, { ui.pageTitle(it) }, { ui.hintText(it) },
-            onModelsChanged = { refreshSavedModels() },
+            onModelsChanged = { refreshSavedModels(); refreshLoraUi() },
             pal = pal,
         )
         tabDownload = downloadPage!!.build()

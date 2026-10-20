@@ -391,6 +391,26 @@ object ModelDownloader {
             kind = ModelKind.DRAW,
             remoteName = "RealVisXL_V5.0-Q4_0.gguf",
         ),
+        "hyper-sd-sd15-1step.safetensors" to ModelInfo(
+            name = "Hyper-SD 1-step LoRA (SD 1.5)",
+            description = "LoRA de 1 paso: imagen en 1 paso con sampler LCM/TCD · 257 MB",
+            url = "$HF_MIRROR/rupeshs/hypersd-sd1-5-1-step-lora/resolve/main/pytorch_lora_weights.safetensors",
+            sizeBytes = 269_127_096L,
+            format = ModelFormat.SAFETENSORS,
+            supportsVision = false,
+            kind = ModelKind.LORA,
+            remoteName = "hyper-sd-sd15-1step.safetensors",
+        ),
+        "sd-turbo-q8_0.gguf" to ModelInfo(
+            name = "SD Turbo Q8_0 (1-4 pasos)",
+            description = "Distilado tipo fastsdcpu: imagen en 1-4 pasos, ideal en CPU",
+            url = "$HF_MIRROR/Green-Sky/SD-Turbo-GGUF/resolve/main/sd_turbo-f16-q8_0.gguf",
+            sizeBytes = 2_023_745_376L,
+            format = ModelFormat.GGUF,
+            supportsVision = false,
+            kind = ModelKind.DRAW,
+            remoteName = "sd_turbo-f16-q8_0.gguf",
+        ),
         "sdxl-lightning-2step-q4_0.gguf" to ModelInfo(
             name = "SDXL Lightning 2-step Q4_0",
             description = "SDXL en 2 pasos - el mas rapido para experimentar",
@@ -459,22 +479,26 @@ object ModelDownloader {
             ModelKind.MMPROJ -> File(context.filesDir, "mmproj")
             ModelKind.DRAW -> File(context.filesDir, "draw")
             ModelKind.TAGGER -> File(context.filesDir, "tagger")
+            // Las LoRA viven donde las busca el motor de dibujo (DrawPage.loraDir)
+            ModelKind.LORA -> File(context.filesDir, "draw/lora")
         }.apply { mkdirs() }
 
         val fileName: String
             get() = remoteName ?: when (format) {
                 ModelFormat.GGUF -> "gguf/${this@ModelInfo.name.lowercase().replace(' ', '-')}.gguf"
                 ModelFormat.LITERTLM -> "litertlm/${this@ModelInfo.name.lowercase().replace(' ', '-')}.litertlm"
+                ModelFormat.SAFETENSORS -> "lora/${this@ModelInfo.name.lowercase().replace(' ', '-')}.safetensors"
             }
 
         val expectedSize: Long get() = sizeBytes
     }
 
-    enum class ModelKind { CHAT, MMPROJ, DRAW, TAGGER }
+    enum class ModelKind { CHAT, MMPROJ, DRAW, TAGGER, LORA }
 
     enum class ModelFormat(val displayName: String) {
         GGUF("GGUF (llama.cpp)"),
-        LITERTLM(".litertlm (LiteRT-LM)")
+        LITERTLM(".litertlm (LiteRT-LM)"),
+        SAFETENSORS(".safetensors (LoRA)")
     }
 
     sealed class DownloadResult {

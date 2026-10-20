@@ -552,4 +552,6 @@
     <string name="s_519">Recomendado: %1$d (núcleos grandes)</string>
     <string name="s_521">NPU: aún no soportada - requiere el SDK del fabricante del chip (por ejemplo Qualcomm QNN).</string>
 
+    <string name="s_522">LoRA</string>
+    <string name="s_523">Modelo destilado: %1$d pasos · CFG 1</string>
 </resources>
