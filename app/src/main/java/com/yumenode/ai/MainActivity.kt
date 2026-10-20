@@ -2538,14 +2538,25 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     // llama.cpp：单 slot + cache_prompt。会话内 KV 前缀会被复用，长对话只需计算新增 token。
                     // 线程数走全局设置（「关于 → 设置」），与绘图、打标共用同一个值。
                     val cpus = InferConfig.threads(this@MainActivity)
-                    val params = ModelLoadSpecs.llamaParams(
+                    val gpuWanted = backendName == "GPU"
+                    fun llamaParams(layers: Int) = ModelLoadSpecs.llamaParams(
                         path = path,
                         ctxSize = chatParams.ctx(),
                         maxOut = chatParams.maxOut(),
                         threads = cpus,
                         mmprojPath = mmprojPath,
+                        gpuLayers = layers,
                     )
-                    val m = LlamaModel(params)
+                    var usedGpu = gpuWanted
+                    // OpenCL solo en Adreno: si el offload falla, se reintenta en CPU.
+                    val m = try {
+                        LlamaModel(llamaParams(if (gpuWanted) ModelLoadSpecs.ALL_LAYERS else 0))
+                    } catch (e: Throwable) {
+                        if (!gpuWanted) throw e
+                        withContext(Dispatchers.Main) { toast(getString(R.string.s_335)) }
+                        usedGpu = false
+                        LlamaModel(llamaParams(0))
+                    }
                     val vok = try { m.supportsVision() } catch (_: Throwable) { false }
                     withContext(Dispatchers.Main) {
                         llamaModel = m
@@ -2558,8 +2569,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                         engine = null
                         conversation = null
                         convThinking = null
-                        setStatus(getString(R.string.s_078), C_OK)
-                        if (backendName == "GPU") toast(getString(R.string.s_016))
+                        setStatus(getString(R.string.s_522, if (usedGpu) "GPU" else "CPU"), C_OK)
                     }
                 } else {
                     // 后端：选 GPU 时先试 LiteRT 的 GPU 后端；设备/驱动不支持就自动退回 CPU

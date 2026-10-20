@@ -34,6 +34,8 @@
             android:roundIcon="@mipmap/ic_launcher_round"
             android:allowBackup="true"
             android:theme="@style/AppTheme">
+        <!-- OpenCL del SoC (Adreno). required=false: si no existe, se usa CPU. -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
 
         <!-- Native GPU libs used by LiteRT-LM's GPU backend (optional, CPU fallback if absent) -->
         <uses-native-library

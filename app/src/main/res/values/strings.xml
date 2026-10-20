@@ -16,7 +16,7 @@
 <string name="s_013">CFG scale</string>
 <string name="s_014">Discrete is the standard choice; Karras pairs with the DPM++ family; LCM goes with the LCM sampler</string>
 <string name="s_015">Euler a is the safest all-rounder; LCM / TCD are the few-step acceleration samplers for LoRA; DPM++ 2M / 2M SDE give more detail but are slower (DPM++ 2M SDE pairs well with the Karras scheduler)</string>
-<string name="s_016">GGUF runs on CPU for now (this runtime has no GPU backend)</string>
+<string name="s_016">GGUF: OpenCL GPU selected</string>
 <string name="s_017">LCM-LoRA is a tens-of-MB \"distillation patch\". Attached to the main model it cuts 20 steps down to 4-8 (~5x faster) without touching the model file.</string>
 <string name="s_018">Downloading LoRA…</string>
 <string name="s_019">LoRA download failed</string>
@@ -551,5 +551,7 @@
     <string name="s_518">Vulkan</string>
     <string name="s_519">Recommended: %1$d (big cores)</string>
     <string name="s_521">NPU: not supported yet - it needs the chipset vendor SDK (for example Qualcomm QNN).</string>
+
+    <string name="s_522">Chat model loaded (llama.cpp · %1$s · KV reuse)</string>
 
 </resources>

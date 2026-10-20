@@ -14,6 +14,9 @@ import java.io.File
  */
 internal object ModelLoadSpecs {
 
+    /** Offload completo: llama.cpp interpreta >=99 como "todas las capas". */
+    const val ALL_LAYERS = 99
+
     /**
      * Parámetros de llama.cpp para un `.gguf`.
      *
@@ -26,6 +29,7 @@ internal object ModelLoadSpecs {
         maxOut: Int,
         threads: Int,
         mmprojPath: String?,
+        gpuLayers: Int = 0,
     ): ModelParameters {
         val params = ModelParameters()
             .setModel(path)
@@ -36,7 +40,7 @@ internal object ModelLoadSpecs {
             .setBatchSize(512)
             .setParallel(1)
             .setKeep(64)
-            .setGpuLayers(0)
+            .setGpuLayers(gpuLayers)
         // Multimodal: sin el proyector de visión el gguf no acepta imágenes.
         mmprojPath?.let { if (File(it).isFile) params.setMmproj(it) }
         return params
