@@ -53,10 +53,17 @@ Se importan ambos archivos y no se descarga nada automáticamente.</p>
 
 <h2>¿De dónde los saco?</h2>
 <ul>
-  <li><strong>Modelos libres</strong> (pestaña 4): catálogo con mirrors de Hugging Face, con pestañas por tipo — <b>Chat</b>, <b>mmproj</b>, <b>Imágenes</b> y <b>Etiquetador</b>. Cada tipo se guarda en su carpeta y queda listo para usarse.</li>
+  <li><strong>Modelos libres</strong> (pestaña 4): catálogo con mirrors de Hugging Face, con pestañas por tipo — <b>Chat</b>, <b>mmproj</b>, <b>Imágenes</b>, <b>Etiquetador</b> y <b>LoRA</b>. Cada tipo se guarda en su carpeta y queda listo para usarse.</li>
   <li><strong>Importar local</strong>: copia el archivo al teléfono y selecciónalo desde la app; se guarda en el
   almacenamiento privado de la aplicación.</li>
 </ul>
+
+<h2>Modelos destilados (1-4 pasos)</h2>
+<p>Turbo, Lightning, Hyper-SD, LCM y SDXS están entrenados para <b>1-4 pasos con CFG 1</b>. La app lo detecta
+por el nombre y ajusta los pasos sola al cargar el modelo o al elegir una LoRA de aceleración; si generas con
+los valores de un modelo normal (20 pasos, CFG 7) tardas ~5× más y el resultado empeora.</p>
+<p>La receta más rápida en móvil: <b>SD 1.5 + Hyper-SD 1-step LoRA</b> (257 MB, pestaña <b>LoRA</b>) con
+1 paso y CFG 1. Referencia medida en un Snapdragon 6 Gen 1: 512×512 en ~1 minuto con build release.</p>
 
 <h2>Formatos no soportados</h2>
 <ul>
