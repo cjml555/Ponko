@@ -37,6 +37,12 @@
 <p>Es un defecto del modelo o de su plantilla, no de la app. Usa la variante <strong>GGUF</strong> del mismo
 modelo, que respeta el idioma y el system prompt.</p>
 
+<h2>La app se cierra al generar con GPU</h2>
+<p>Con el backend en <strong>GPU</strong>, Vulkan llega a inicializar (<code>backend: Vulkan0</code>), pero en algunos
+drivers la generación revienta en la asignación de buffers (<code>ggml_backend_buft_alloc_buffer</code>, puntero
+nulo) y el proceso muere: es un fallo nativo que la app no puede atrapar. Vuelve a <strong>CPU</strong> en
+Modelos/API → Backend; el dibujo funciona igual, solo más lento.</p>
+
 <h2>GPU no disponible / cae a CPU</h2>
 <p>Si el teléfono no expone un dispositivo Vulkan o el driver falla, la app continúa en CPU y lo avisa. El
 dibujo con GPU todavía no está validado en hardware real.</p>

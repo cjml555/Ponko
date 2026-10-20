@@ -206,7 +206,7 @@ powershell -File tools/build-release.ps1
 
 - El contexto de chat predeterminado es 4096 tokens (ajustable en la página de modelos).
 - Chat `.gguf` es **solo CPU**. La variante OpenCL del binding existe, pero en Adreno 619 (SM6450) el driver de Qualcomm (`libllvm-qcom.so`) hace **SIGSEGV** al compilar los kernels de `ggml`: probado en dispositivo, no es viable sin aislar el proceso.
-- El dibujo es CPU-only por defecto; GPU (Vulkan) no está validada en dispositivo real.
+- El dibujo usa CPU por defecto. La GPU (Vulkan) **inicializa** (`backend: Vulkan0`), pero en Adreno 619 la generacion hace **SIGSEGV** en `ggml_backend_buft_alloc_buffer` (puntero nulo): no usable en ese driver. En otros SoC requiere validacion.
 - El Tagger se carga bajo demanda (consume cientos de MB).
 - Límite: 4 imágenes y 2 archivos por mensaje.
 - Sin conexión: sin internet excepto descarga manual de modelos/LoRA y el envío opcional del benchmark.
