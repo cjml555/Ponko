@@ -91,7 +91,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     // GGUF (llama.cpp) local model runtime — full llama.cpp API incl. KV-cache reuse
     // (net.ladenthin:llama-android AAR requires minSdk 28, native = arm64-v8a)
-    implementation("net.ladenthin:llama-android:5.1.0")
+    // Variante OpenCL (spike): misma API, .so con GPU Adreno via libOpenCL.so.
+    // NO usar en produccion: crashea en Adreno 619 (driver llvm-qcom).
+    implementation("net.ladenthin:llama-android-opencl:5.1.0")
     // Markdown rendering for AI replies (bold/lists/headings/code/tables/links)
     implementation("io.noties.markwon:core:4.6.2")
     implementation("io.noties.markwon:ext-tables:4.6.2")
