@@ -109,8 +109,21 @@ internal object DeviceProbe {
      * migren) suele salir más caro que usar solo los grandes. Si el equipo no
      * expone frecuencias, se asume el total.
      */
-    fun recommendedThreads(caps: DeviceCapabilities): Int =
-        caps.bigCores.coerceIn(1, caps.coreCount)
+    /**
+     * Hilos recomendados: los nucleos "big", con un minimo de 4.
+     *
+     * El minimo importa en los SoC con un solo nucleo prime: un Dimensity 8350
+     * expone 1 nucleo a 4.21 GHz y 3 a ~3.0 GHz, asi que el conteo por frecuencia
+     * da 1 y el motor se queda con un hilo (unas 6x mas lento). Con 4 hilos el
+     * scheduler reparte entre prime + los tres medios.
+     */
+    fun recommendedThreads(caps: DeviceCapabilities): Int {
+        val floor = minOf(MIN_THREADS, caps.coreCount)
+        return caps.bigCores.coerceAtLeast(floor).coerceIn(1, caps.coreCount)
+    }
+
+    /** Suelo de hilos: por debajo de esto el dibujo se arrastra. */
+    private const val MIN_THREADS = 4
 
     private fun readLong(path: String): Long? = runCatching {
         val f = File(path)
