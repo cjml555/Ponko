@@ -185,15 +185,13 @@ class ChatImageHandler(
 
     // ── cápsulas de utilidad ─
 
-    private fun dp(d: Int): Int {
-        val scale = ctx.resources.displayMetrics.density
-        return (d * scale + 0.5f).toInt()
-    }
+    /** dp → px redondeando (aqui un pixel de diferencia se nota; ver [UiScale]). */
+    private fun dp(d: Int): Int =
+        UiScale.dpToPxRounded(d, ctx.resources.displayMetrics.density)
 
-    private fun matchWrap() =
-        LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT)
+    /** MATCH_PARENT x WRAP_CONTENT (helper de Context, reutilizado aqui). */
+    private fun matchWrap() = with(ctx) { matchWrap() }
+
 }
 
 /** AI reply card — extraída de MainActivity como clase top-level para compartirla. */

@@ -123,8 +123,7 @@ class ApiServer(
             val auth = headers["authorization"] ?: ""
             val given = auth.removePrefix("Bearer ").trim()
             if (given != apiKey) {
-                respondJson(s, 401, JSONObject().put("error", JSONObject()
-                    .put("message", "Invalid API key").put("type", "invalid_request_error")))
+                respondJson(s, 401, OpenAiApi.error("Invalid API key", OpenAiApi.ErrorType.INVALID_REQUEST))
                 return
             }
         }
@@ -139,18 +138,17 @@ class ApiServer(
             method == "POST" && path == "/v1/images/generations" ->
                 if (role == Role.DRAW) imagesGenerations(s, body) else wrongRole(s, "/v1/images/generations", "draw")
 
-            else -> respondJson(s, 404, JSONObject().put("error", JSONObject()
-                .put("message", "Not found: $method $path").put("type", "invalid_request_error")))
+            else -> respondJson(s, 404, OpenAiApi.error("Not found: $method $path", OpenAiApi.ErrorType.INVALID_REQUEST))
         }
     }
 
     /** 请求打到了「另一类接口」的端口上——明确告诉客户端该去哪，别让它自己猜 */
     private fun wrongRole(s: Socket, path: String, wanted: String) {
         val where = if (wanted == "chat") "Chat model" else "Draw model"
-        respondJson(s, 404, errJson(
+        respondJson(s, 404, OpenAiApi.error(
             "$path is not served on this port. The $wanted API runs on its own port - " +
                 "open Yumenode AI, go to Models/API -> $where -> API tab to see its address.",
-            "invalid_request_error"))
+            OpenAiApi.ErrorType.INVALID_REQUEST))
     }
 
     /** 本实例的状态。两个 role 各自报告自己那类模型的就绪情况。 */
@@ -183,9 +181,6 @@ class ApiServer(
         return JSONObject().put("object", "list").put("data", arr)
     }
 
-    private fun errJson(message: String, type: String): JSONObject =
-        JSONObject().put("error", JSONObject().put("message", message).put("type", type))
-
     // ==================== /v1/images/generations ====================
 
     /**
@@ -198,32 +193,26 @@ class ApiServer(
     private fun imagesGenerations(s: Socket, body: ByteArray) {
         val req = runCatching { JSONObject(String(body, Charsets.UTF_8)) }.getOrNull()
         if (req == null) {
-            respondJson(s, 400, errJson("Invalid JSON body", "invalid_request_error"))
+            respondJson(s, 400, OpenAiApi.error("Invalid JSON body", OpenAiApi.ErrorType.INVALID_REQUEST))
             return
         }
         val prompt = req.optString("prompt", "").trim()
         if (prompt.isEmpty()) {
-            respondJson(s, 400, errJson("prompt is required", "invalid_request_error"))
+            respondJson(s, 400, OpenAiApi.error("prompt is required", OpenAiApi.ErrorType.INVALID_REQUEST))
             return
         }
         if (!DrawCore.isReady()) {
-            respondJson(s, 503, errJson(
-                "No drawing model loaded in Yumenode AI. Open the app and load one first.",
-                "service_unavailable"))
+            respondJson(s, 503, OpenAiApi.error("No drawing model loaded in Yumenode AI. Open the app and load one first.", OpenAiApi.ErrorType.SERVICE_UNAVAILABLE))
             return
         }
         if (DrawCore.busy || DrawCore.uiBusy) {
-            respondJson(s, 429, errJson(
-                "The drawing engine is busy with another request. Retry shortly.",
-                "rate_limit_error"))
+            respondJson(s, 429, OpenAiApi.error("The drawing engine is busy with another request. Retry shortly.", OpenAiApi.ErrorType.RATE_LIMIT))
             return
         }
         val fmt = req.optString("response_format", "b64_json").lowercase()
         if (fmt != "b64_json") {
-            respondJson(s, 400, errJson(
-                "Only response_format=b64_json is supported (this server has no public URL to serve images from). " +
-                    "Pass response_format=\"b64_json\" in your request.",
-                "invalid_request_error"))
+            respondJson(s, 400, OpenAiApi.error("Only response_format=b64_json is supported (this server has no public URL to serve images from). " +
+                    "Pass response_format=\"b64_json\" in your request.", OpenAiApi.ErrorType.INVALID_REQUEST))
             return
         }
 
@@ -235,8 +224,7 @@ class ApiServer(
         if (sizeStr.isNotEmpty()) {
             val m = Regex("^(\\d+)\\s*[xX×]\\s*(\\d+)$").find(sizeStr)
             if (m == null) {
-                respondJson(s, 400, errJson(
-                    "size must look like \"512x512\"", "invalid_request_error"))
+                respondJson(s, 400, OpenAiApi.error("size must look like \"512x512\"", OpenAiApi.ErrorType.INVALID_REQUEST))
                 return
             }
             w = m.groupValues[1].toIntOrNull()
@@ -300,7 +288,7 @@ class ApiServer(
         } catch (e: Throwable) {
             // 走到这里多半是客户端中途断开（写不出去）或引擎出错
             runCatching {
-                respondJson(s, 500, errJson(e.message ?: e.javaClass.simpleName, "server_error"))
+                respondJson(s, 500, OpenAiApi.error(e.message ?: e.javaClass.simpleName, OpenAiApi.ErrorType.SERVER))
             }
             return
         }
@@ -314,39 +302,32 @@ class ApiServer(
     private fun chatCompletions(s: Socket, body: ByteArray) {
         val req = runCatching { JSONObject(String(body, Charsets.UTF_8)) }.getOrNull()
         if (req == null) {
-            respondJson(s, 400, JSONObject().put("error", JSONObject()
-                .put("message", "Invalid JSON body").put("type", "invalid_request_error")))
+            respondJson(s, 400, OpenAiApi.error("Invalid JSON body", OpenAiApi.ErrorType.INVALID_REQUEST))
             return
         }
-        val messages = ArrayList<ChatCore.Msg>()
-        req.optJSONArray("messages")?.let { arr ->
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                messages.add(ChatCore.Msg(o.optString("role", "user"), contentToText(o.opt("content"))))
-            }
-        }
-        if (messages.none { it.role != "system" && it.text.isNotEmpty() }) {
-            respondJson(s, 400, JSONObject().put("error", JSONObject()
-                .put("message", "messages must contain a non-empty user message").put("type", "invalid_request_error")))
+        val messages = OpenAiApi.parseMessages(req.optJSONArray("messages"))
+            .map { ChatCore.Msg(it.role, it.text) }
+        if (!OpenAiApi.hasUserMessage(messages.map { OpenAiApi.Message(it.role, it.text) })) {
+            respondJson(s, 400, OpenAiApi.error("messages must contain a non-empty user message", OpenAiApi.ErrorType.INVALID_REQUEST))
             return
         }
         if (!ChatCore.isReady()) {
-            respondJson(s, 503, JSONObject().put("error", JSONObject()
-                .put("message", "No chat model loaded in Yumenode AI. Open the app and load a model first.")
-                .put("type", "service_unavailable")))
+            respondJson(s, 503, OpenAiApi.error(
+                "No chat model loaded in Yumenode AI. Open the app and load a model first.",
+                OpenAiApi.ErrorType.SERVICE_UNAVAILABLE))
             return
         }
         if (ChatCore.busy) {
-            respondJson(s, 429, JSONObject().put("error", JSONObject()
-                .put("message", "The model is busy with another request. Retry shortly.")
-                .put("type", "rate_limit_error")))
+            respondJson(s, 429, OpenAiApi.error(
+                "The model is busy with another request. Retry shortly.",
+                OpenAiApi.ErrorType.RATE_LIMIT))
             return
         }
 
         val stream = req.optBoolean("stream", false)
-        val temperature = if (req.has("temperature")) req.optDouble("temperature").toFloat() else null
-        val maxTokens = if (req.has("max_tokens")) req.optInt("max_tokens") else
-            if (req.has("max_completion_tokens")) req.optInt("max_completion_tokens") else null
+        val sampling = OpenAiApi.parseSampling(req)
+        val temperature = sampling.temperature
+        val maxTokens = sampling.maxTokens
         val model = ChatCore.modelName ?: "ponko"
         val id = "chatcmpl-" + System.nanoTime().toString(36)
         val created = System.currentTimeMillis() / 1000
@@ -358,21 +339,14 @@ class ApiServer(
             val answer = runCatching {
                 runBlocking { ChatCore.generate(messages, temperature, maxTokens) { } }
             }.getOrElse { e ->
-                respondJson(s, 500, JSONObject().put("error", JSONObject()
-                    .put("message", e.message ?: e.javaClass.simpleName).put("type", "server_error")))
+                respondJson(s, 500, OpenAiApi.error(e.message ?: e.javaClass.simpleName, OpenAiApi.ErrorType.SERVER))
                 return
             }
             val usage = JSONObject()
                 .put("prompt_tokens", estimateTokens(messages.sumOf { it.text.length }))
                 .put("completion_tokens", estimateTokens(answer.length))
                 .put("total_tokens", estimateTokens(messages.sumOf { it.text.length } + answer.length))
-            respondJson(s, 200, JSONObject()
-                .put("id", id).put("object", "chat.completion").put("created", created).put("model", model)
-                .put("choices", JSONArray().put(JSONObject()
-                    .put("index", 0)
-                    .put("message", JSONObject().put("role", "assistant").put("content", answer))
-                    .put("finish_reason", "stop")))
-                .put("usage", usage))
+            respondJson(s, 200, OpenAiApi.chatCompletion(id, model, created, answer, usage))
             return
         }
 
@@ -382,20 +356,13 @@ class ApiServer(
         var broke = false
         fun event(obj: JSONObject) {
             if (broke) return
-            try { writeChunk(out, "data: $obj\n\n") } catch (_: Throwable) {
+            try { writeChunk(out, OpenAiApi.sseEvent(obj)) } catch (_: Throwable) {
                 broke = true
                 ChatCore.requestCancel()   // 客户端断开就别再算了
             }
         }
         fun deltaEvent(content: String, role: String? = null) {
-            val d = JSONObject()
-            if (role != null) d.put("role", role)
-            d.put("content", content)
-            event(JSONObject()
-                .put("id", id).put("object", "chat.completion.chunk").put("created", created).put("model", model)
-                .put("choices", JSONArray().put(JSONObject()
-                    .put("index", 0).put("delta", d)
-                    .put("finish_reason", JSONObject.NULL))))
+            event(OpenAiApi.chatChunk(id, model, created, content, role))
         }
         try {
             deltaEvent("", role = "assistant")
@@ -403,37 +370,16 @@ class ApiServer(
                 ChatCore.generate(messages, temperature, maxTokens) { piece -> deltaEvent(piece) }
             }
             if (!broke) {
-                event(JSONObject()
-                    .put("id", id).put("object", "chat.completion.chunk").put("created", created).put("model", model)
-                    .put("choices", JSONArray().put(JSONObject()
-                        .put("index", 0).put("delta", JSONObject()).put("finish_reason", "stop"))))
-                writeChunk(out, "data: [DONE]\n\n")
+                event(OpenAiApi.chatChunkFinish(id, model, created))
+                writeChunk(out, OpenAiApi.SSE_DONE)
             }
         } catch (e: Throwable) {
             if (!broke) {
-                event(JSONObject().put("error", JSONObject()
-                    .put("message", e.message ?: e.javaClass.simpleName).put("type", "server_error")))
+                event(OpenAiApi.error(e.message ?: e.javaClass.simpleName, OpenAiApi.ErrorType.SERVER))
             }
         } finally {
             runCatching { out.write("0\r\n\r\n".toByteArray()); out.flush() }
         }
-    }
-
-    /** OpenAI 的 content 可能是字符串，也可能是 [{type:"text",text:"..."}] 这类数组 */
-    private fun contentToText(content: Any?): String = when (content) {
-        null -> ""
-        is String -> content
-        is JSONArray -> {
-            val sb = StringBuilder()
-            for (i in 0 until content.length()) {
-                val part = content.optJSONObject(i) ?: continue
-                val type = part.optString("type", "text")
-                if (type == "text" || type == "input_text") sb.append(part.optString("text"))
-                else if (type == "image_url") sb.append("[image]")
-            }
-            sb.toString()
-        }
-        else -> content.toString()
     }
 
     /** 粗估 token（本地模型没有分词器接口，按 4 字符 ≈ 1 token）——只用于 usage 字段 */

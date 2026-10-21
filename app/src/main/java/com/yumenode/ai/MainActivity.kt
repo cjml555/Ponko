@@ -53,6 +53,7 @@ import com.google.ai.edge.litertlm.ModelInfo
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.yumenode.ai.draw.DrawPage
+import com.yumenode.ai.draw.ModelSet
 import com.yumenode.ai.draw.GgufProbe
 import com.yumenode.ai.draw.TaggerEngine
 import com.google.ai.edge.litertlm.Conversation
@@ -1168,6 +1169,28 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private fun buildSettingsPage(): View = SettingsPage(this).build()
 
     /** Crea el host exhibido a ModelsPage (ViewController/Page pattern) */
+    /** Contrato que el importer usa para tocar la UI. */
+    private val drawFileImportHost: DrawFileImportHost = object : DrawFileImportHost {
+        // Todas las referencias al Activity van calificadas con this@MainActivity:
+        // dentro de un objeto anonimo, un `this` sin calificar es el propio objeto.
+        override fun setBusy(busy: Boolean) = this@MainActivity.applyBusy(busy)
+        override fun setDrawBusy(busy: Boolean) = this@MainActivity.setDrawBusy(busy)
+        override fun showDrawProgress(show: Boolean) = this@MainActivity.showDrawProgress(show)
+        override fun setStatus(text: String, color: Int) = this@MainActivity.setStatus(text, color)
+        override fun toast(msg: String) = this@MainActivity.toast(msg)
+        override fun busyMessage(): String = getString(R.string.s_131)
+        override fun errorMessage(): String = getString(R.string.s_158)
+        override fun okColor(): Int = C_OK
+        override fun errColor(): Int = C_ERR
+        override fun warnColor(): Int = C_WARN
+    }
+
+    /**
+     * Importacion de ficheros de dibujo (LoRA / modelo del tagger / tabla de tags).
+     * Unifica los tres handlers que eran copias del mismo codigo.
+     */
+    private val drawFileImporter: DrawFileImporter<Uri> = DrawFileImporter(scope, drawFileImportHost)
+
     private fun createModelsPageHost(): ModelsHost {
         return object : ModelsHost {
             override val activity: Activity get() = this@MainActivity
@@ -1690,12 +1713,6 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
      * 估算 LiteRT 会话的输入 token：系统提示 + 历史 + 本轮要发的内容。
      * 历史里之前发过的文件正文也还留在引擎的上下文里，所以一并算上。
      */
-    private fun estimateConversationTokens(s: ChatSession, extra: String, dropLast: Boolean): Float =
-        chatManager.estimateConversationTokens(
-            session = s, extra = extra, dropLast = dropLast,
-            canDrawFromChat = canDrawFromChat, drawToolPrompt = drawToolPrompt
-        )
-
     /** 判断是不是「上下文塞不下」这类错误（LiteRT Status Code 3 / llama.cpp 的 context 满） */
     internal fun isContextOverflow(e: Throwable): Boolean {
         val m = (e.message ?: "").lowercase()
@@ -2042,85 +2059,43 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private fun handlePickedLora(data: Intent?) {
         val uri = data?.data ?: return
         val dpg = drawPage ?: return
-        applyBusy(true)
-        setDrawBusy(true)
-        showDrawProgress(true)
-        setStatus(getString(R.string.s_131), C_WARN)
-        scope.launch {
-            val err = dpg.importLoraFile(
-                uri,
-                onStage = { stage -> loraStatusTv?.text = stage },
-                onProgress = { done, total -> updateDrawProgress(done, total) }
-            )
-            applyBusy(false)
-            setDrawBusy(false)
-            showDrawProgress(false)
-            if (err == null) {
-                setStatus(getString(R.string.s_220), C_OK)
-                toast(getString(R.string.s_220))
-            } else {
-                setStatus(getString(R.string.s_158), C_ERR)
-                toast(err)
-            }
-            refreshLoraUi()
-        }
-    
+        drawFileImporter.import(
+            uri = uri,
+            importFile = { u, onStage, onProgress -> dpg.importLoraFile(u, onStage, onProgress) },
+            onStage = { stage -> loraStatusTv?.text = stage },
+            onProgress = { done, total -> updateDrawProgress(done, total) },
+            onOk = getString(R.string.s_220),
+            onToast = getString(R.string.s_220),
+            refresh = { refreshLoraUi() },
+        )
     }
 
     private fun handlePickedTaggerOnnx(data: Intent?) {
         val uri = data?.data ?: return
         val dpg = drawPage ?: return
-        applyBusy(true)
-        setDrawBusy(true)
-        showDrawProgress(true)
-        setStatus(getString(R.string.s_131), C_WARN)
-        scope.launch {
-            val err = dpg.importTaggerModel(
-                uri,
-                onStage = { stage -> taggerStatusTv?.text = stage },
-                onProgress = { done, total -> updateDrawProgress(done, total) }
-            )
-            applyBusy(false)
-            setDrawBusy(false)
-            showDrawProgress(false)
-            if (err == null) {
-                setStatus(getString(R.string.s_267), C_OK)
-                toast(getString(R.string.s_269))
-            } else {
-                setStatus(getString(R.string.s_158), C_ERR)
-                toast(err)
-            }
-            refreshTaggerUi()
-        }
-    
+        drawFileImporter.import(
+            uri = uri,
+            importFile = { u, onStage, onProgress -> dpg.importTaggerModel(u, onStage, onProgress) },
+            onStage = { stage -> taggerStatusTv?.text = stage },
+            onProgress = { done, total -> updateDrawProgress(done, total) },
+            onOk = getString(R.string.s_267),
+            onToast = getString(R.string.s_269),
+            refresh = { refreshTaggerUi() },
+        )
     }
 
     private fun handlePickedTaggerCsv(data: Intent?) {
         val uri = data?.data ?: return
         val dpg = drawPage ?: return
-        applyBusy(true)
-        setDrawBusy(true)
-        showDrawProgress(true)
-        setStatus(getString(R.string.s_131), C_WARN)
-        scope.launch {
-            val err = dpg.importTaggerCsv(
-                uri,
-                onStage = { stage -> taggerStatusTv?.text = stage },
-                onProgress = { done, total -> updateDrawProgress(done, total) }
-            )
-            applyBusy(false)
-            setDrawBusy(false)
-            showDrawProgress(false)
-            if (err == null) {
-                setStatus(getString(R.string.s_268), C_OK)
-                toast(getString(R.string.s_269))
-            } else {
-                setStatus(getString(R.string.s_158), C_ERR)
-                toast(err)
-            }
-            refreshTaggerUi()
-        }
-    
+        drawFileImporter.import(
+            uri = uri,
+            importFile = { u, onStage, onProgress -> dpg.importTaggerCsv(u, onStage, onProgress) },
+            onStage = { stage -> taggerStatusTv?.text = stage },
+            onProgress = { done, total -> updateDrawProgress(done, total) },
+            onOk = getString(R.string.s_268),
+            onToast = getString(R.string.s_269),
+            refresh = { refreshTaggerUi() },
+        )
     }
 
     /** Models can't be loaded from a content:// URI, so copy them to a real file first. */
@@ -2363,7 +2338,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     }
 
     /** 点击某个模型集 → 只标记为选用，不加载（与对话模型一致，需再点「加载绘图模型」）。 */
-    private fun selectDrawSet(s: DrawPage.ModelSet) {
+    private fun selectDrawSet(s: ModelSet) {
         drawPage?.selectSet(s)
         drawSetId = s.id
         drawModelStatus?.text = drawPage?.modelSummary()
@@ -2509,7 +2484,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     }
 
     /** 长按删除一个模型集（连同它的全部文件）。 */
-    private fun confirmDeleteDrawSet(s: DrawPage.ModelSet) {
+    private fun confirmDeleteDrawSet(s: ModelSet) {
         val dpg = drawPage ?: return
         if (dpg.isReady() && dpg.activeSetId() == s.id) {
             toast(getString(R.string.s_172))

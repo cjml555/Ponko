@@ -100,8 +100,8 @@ class DrawPage(
         private const val TAESD_HF_PATH =
             "madebyollin/taesd/resolve/main/diffusion_pytorch_model.safetensors"
 
-        /** Tamaño mínimo razonable del archivo TAESD (4.9 MB en la práctica) */
-        private const val TAESD_MIN_BYTES = 1_000_000L
+        /** Tamaño mínimo razonable del archivo TAESD (fuente única: [ModelSetStore]) */
+        private const val TAESD_MIN_BYTES = ModelSetStore.TAESD_MIN_BYTES
 
         /** LCM-LoRA：HuggingFace 官方仓库路径（文件实名为 pytorch_lora_weights.safetensors） */
         private const val LORA_HF_PATH =
@@ -110,12 +110,9 @@ class DrawPage(
         /** 下载后重命名成这个，prompt 里就用 `lora:lcm-lora-sdv1-5:1` 引用 */
         const val LORA_NAME = "lcm-lora-sdv1-5"
 
-        /** 模型集偏好键（当前选中的模型集 id） */
-        private const val KEY_SEL_SET = "selSet"
-
-        /** 单文件 / 多文件 */
-        const val KIND_SINGLE = "single"
-        const val KIND_MULTI = "multi"
+        /** 单文件 / 多文件（fuente única: [ModelSetStore]) */
+        const val KIND_SINGLE = ModelSetStore.KIND_SINGLE
+        const val KIND_MULTI = ModelSetStore.KIND_MULTI
 
         /** 家族 id */
         const val FAM_SD15 = "sd15"
@@ -213,8 +210,6 @@ class DrawPage(
         private const val KEY_VAE_TILE_SIZE = "vaeTileSize"
         /** VAE tiling 的块重叠（0–0.5） */
         private const val KEY_VAE_TILE_OVERLAP = "vaeTileOverlap"
-        /** TAESD activo（ruta absoluta del fichero）， global a todos los modelos */
-        private const val KEY_TAESD_PATH = "taesdPath"
         private const val KEY_SAMPLER = "drawSampler"
         private const val KEY_SCHEDULER = "drawScheduler"
 
@@ -244,6 +239,12 @@ class DrawPage(
 
     /** 当前模型集（单文件 = 只填主模型；多文件 = 主模型 + 各槽位配套文件） */
     private var activeSet: ModelSet? = null
+
+    /**
+     * Persistencia de los model sets (JSON en files/draw/sets + ficheros sueltos).
+     * Extraido de esta clase para que la logica de disco quede testeable en JVM.
+     */
+    private val setStore: ModelSetStore = ModelSetStore(c.filesDir, prefs())
     /** 下一个要导入的类型（由「模型」页的类型菜单设定） */
     var pendingKind: String = KIND_SINGLE
     var pendingFamily: String = FAM_SD15
@@ -284,6 +285,18 @@ class DrawPage(
     /** 当前选中的 LoRA（null = 自动取目录里第一个） */
     private var loraFile: File? = null
 
+    /**
+     * Catalogo de LoRA descargadas/importadas.
+     * Extraido de esta clase para que la regla de seleccion quede testeable.
+     */
+    private val loraStore: LoraStore = LoraStore(c.filesDir, prefs())
+
+    /**
+     * Catalogo del tagger (modelo ONNX + tabla de tags) y decision de recarga.
+     * Extraido de esta clase para que ambas reglas queden testeables.
+     */
+    private val taggerStore: TaggerStore = TaggerStore(c.filesDir, prefs())
+
     /** SD 管线就绪时回调（MainActivity 借此切到绘图模式） */
     var onPipelineReady: (() -> Unit)? = null
 
@@ -301,17 +314,15 @@ class DrawPage(
         val lora = if (useLora) activeLora() else null
         DrawCore.updateParams(
             DrawCore.Params(
-                steps = stepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20,
-                cfg = cfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f,
-                width = (widthEdit.text.toString().toIntOrNull() ?: 512)
-                    .let { (it / 64) * 64 }.coerceIn(64, 2048),
-                height = (heightEdit.text.toString().toIntOrNull() ?: 512)
-                    .let { (it / 64) * 64 }.coerceIn(64, 2048),
+                steps = DrawParamsLogic.steps(stepsEdit.text.toString()),
+                cfg = DrawParamsLogic.cfg(cfgEdit.text.toString()),
+                width = DrawParamsLogic.size(widthEdit.text.toString()),
+                height = DrawParamsLogic.size(heightEdit.text.toString()),
                 negative = negEdit.text.toString(),
                 sampler = pickSampler(lora != null),
                 scheduler = pickScheduler(lora != null),
                 loraPath = lora?.absolutePath,
-                loraScale = loraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f,
+                loraScale = DrawParamsLogic.loraScale(loraScaleEdit.text.toString()),
             )
         )
     }
@@ -1259,8 +1270,8 @@ class DrawPage(
             c.toast(c.getString(R.string.s_214), short = true)
             return
         }
-        val threshold = taggerThresholdEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.35f
-        val topK = taggerTopKEdit.text.toString().toIntOrNull()?.coerceIn(1, 300) ?: 40
+        val threshold = DrawParamsLogic.taggerThreshold(taggerThresholdEdit.text.toString())
+        val topK = DrawParamsLogic.taggerTopK(taggerTopKEdit.text.toString())
         taggerRunBtn.isEnabled = false
         taggerProgressText.visibility = View.VISIBLE
         taggerProgressText.text = c.getString(R.string.s_229)
@@ -1304,12 +1315,17 @@ class DrawPage(
     private fun ensureTaggerLoaded(): String? {
         val model = taggerModelFile() ?: return c.getString(R.string.s_228)
         val csv = taggerCsvFile() ?: return c.getString(R.string.s_228)
-        val (mName, cName) = TaggerEngine.fileNames()
-        if (TaggerEngine.isLoaded() && mName == model.name && cName == csv.name &&
-            TaggerEngine.loadedWithGpu() == useGpu) return null
+        val sel = TaggerSelection(model.name, csv.name, useGpu)
+        if (sel.isReadyWith(currentTaggerSession())) return null
         // 线程数走全局设置（InferConfig）——与对话 gguf、打标共用同一个值
         val threads = InferConfig.threads(c)
         return TaggerEngine.load(c, model, csv, useGpu, threads)
+    }
+
+    /** Estado del tagger en memoria (lo que hay cargado ahora mismo). */
+    private fun currentTaggerSession(): TaggerSession {
+        val (mName, cName) = TaggerEngine.fileNames()
+        return TaggerSession(TaggerEngine.isLoaded(), mName, cName, TaggerEngine.loadedWithGpu())
     }
 
     /**
@@ -1319,10 +1335,8 @@ class DrawPage(
     private fun taggerReadyError(): String? {
         val model = taggerModelFile() ?: return c.getString(R.string.s_228)
         val csv = taggerCsvFile() ?: return c.getString(R.string.s_228)
-        if (!TaggerEngine.isLoaded()) return c.getString(R.string.s_259)
-        val (mName, cName) = TaggerEngine.fileNames()
-        if (mName != model.name || cName != csv.name || TaggerEngine.loadedWithGpu() != useGpu)
-            return c.getString(R.string.s_259)
+        val sel = TaggerSelection(model.name, csv.name, useGpu)
+        if (!sel.isReadyWith(currentTaggerSession())) return c.getString(R.string.s_259)
         return null
     }
 
@@ -1403,40 +1417,32 @@ class DrawPage(
     // ---- 打标模型文件（模型页导入，这里只读） ----
 
     /** 打标目录：filesDir/tagger */
-    private fun taggerDir(): File = File(c.filesDir, TAGGER_DIR).apply { mkdirs() }
+    private fun taggerDir(): File = taggerStore.dir()
 
     /** 已导入的打标模型（.onnx），按名字排序 */
-    fun listTaggerModels(): List<File> =
-        taggerDir().listFiles { f -> f.isFile && f.name.endsWith(".onnx", true) }?.sortedBy { it.name } ?: emptyList()
+    fun listTaggerModels(): List<File> = taggerStore.listModels()
 
     /** 已导入的标签表（.csv） */
-    fun listTaggerCsvs(): List<File> =
-        taggerDir().listFiles { f -> f.isFile && f.name.endsWith(".csv", true) }?.sortedBy { it.name } ?: emptyList()
+    fun listTaggerCsvs(): List<File> = taggerStore.listCsvs()
 
     /** 当前选中的打标模型（优先上次选择的，否则第一个） */
-    fun taggerModelFile(): File? = pickSelected(listTaggerModels(), "selTaggerModel")
+    fun taggerModelFile(): File? = taggerStore.modelFile()
 
     /** 当前选中的标签表 */
-    fun taggerCsvFile(): File? = pickSelected(listTaggerCsvs(), "selTaggerCsv")
+    fun taggerCsvFile(): File? = taggerStore.csvFile()
 
-    private fun pickSelected(all: List<File>, key: String): File? {
-        if (all.isEmpty()) return null
-        val saved = prefs().getString(key, null)
-        return all.firstOrNull { it.name == saved } ?: all.first()
-    }
-
-    fun currentTaggerModelName(): String? = taggerModelFile()?.name
-    fun currentTaggerCsvName(): String? = taggerCsvFile()?.name
+    fun currentTaggerModelName(): String? = taggerStore.currentModelName()
+    fun currentTaggerCsvName(): String? = taggerStore.currentCsvName()
 
     /** 选择打标模型（换模型就卸载旧的，下次打标时重新加载） */
     fun selectTaggerModel(f: File) {
-        prefs().edit().putString("selTaggerModel", f.name).apply()
+        taggerStore.selectModel(f)
         TaggerEngine.unload()
     }
 
     /** 选择标签表 */
     fun selectTaggerCsv(f: File) {
-        prefs().edit().putString("selTaggerCsv", f.name).apply()
+        taggerStore.selectCsv(f)
         TaggerEngine.unload()
     }
 
@@ -1552,8 +1558,8 @@ class DrawPage(
         i2iBitmap = bmp
         i2iPreview.setImageBitmap(bmp)
         i2iPreview.visibility = View.VISIBLE
-        val w = ((bmp.width / 64) * 64).coerceIn(64, 2048)
-        val h = ((bmp.height / 64) * 64).coerceIn(64, 2048)
+        val w = DrawParamsLogic.alignSize(bmp.width)
+        val h = DrawParamsLogic.alignSize(bmp.height)
         i2iWidthEdit.setText(w.toString())
         i2iHeightEdit.setText(h.toString())
         i2iImgHint.text = c.getString(R.string.v_061, bmp.width, bmp.height)
@@ -1574,25 +1580,15 @@ class DrawPage(
     // ================= LoRA =================
 
     /** LoRA 目录：filesDir/draw/lora */
-    private fun loraDir(): File = File(File(c.filesDir, DIR_NAME), "lora").apply { mkdirs() }
+    private fun loraDir(): File = loraStore.loraDir()
 
     /** 已下载的 LoRA 列表（.safetensors） */
-    fun listLoras(): List<File> =
-        loraDir().listFiles { f -> f.isFile && f.name.endsWith(".safetensors", ignoreCase = true) }
-            ?.sortedBy { it.name } ?: emptyList()
+    fun listLoras(): List<File> = loraStore.list()
 
-    fun hasLora(): Boolean = listLoras().isNotEmpty()
+    fun hasLora(): Boolean = loraStore.hasAny()
 
     /** 当前生效的 LoRA（优先用户选中的，其次上次选中的，最后取第一个） */
-    fun activeLora(): File? {
-        val all = listLoras()
-        if (all.isEmpty()) return null
-        val sel = loraFile
-        if (sel != null && sel.isFile && all.any { it.absolutePath == sel.absolutePath }) return sel
-        val saved = prefs().getString("selLora", null)
-        if (saved != null) all.firstOrNull { it.name == saved }?.let { loraFile = it; return it }
-        return all.first()
-    }
+    fun activeLora(): File? = loraStore.active(loraFile)
 
     /** UI 高亮用：当前生效的 LoRA 名 */
     fun currentLoraName(): String? = activeLora()?.name
@@ -1600,7 +1596,7 @@ class DrawPage(
     /** 选中某个 LoRA（持久化选择） */
     fun selectLora(f: File) {
         loraFile = f
-        prefs().edit().putString("selLora", f.name).apply()
+        loraStore.select(f)
         refreshLoraHint()
         // Una LoRA de aceleracion (Hyper-SD / LCM / Lightning) cambia los pasos utiles:
         // aplicamos el preset de su familia para no generar con 20 pasos.
@@ -1617,12 +1613,12 @@ class DrawPage(
         else c.getString(R.string.v_027, (a.nameWithoutExtension), (size))
     }
 
-    fun deleteLora(f: File): Boolean = runCatching {
+    fun deleteLora(f: File): Boolean {
         if (loraFile?.absolutePath == f.absolutePath) loraFile = null
-        val ok = f.delete()
+        val ok = loraStore.delete(f)
         refreshLoraHint()
-        ok
-    }.getOrDefault(false)
+        return ok
+    }
 
     private fun refreshLoraHint() {
         try {
@@ -1722,100 +1718,15 @@ class DrawPage(
 
     // ================= 模型集（单文件 / 多文件；由「模型」页驱动） =================
 
-    /** 一个模型集：单文件 = 只填 model 槽位；多文件 = 主模型 + 各槽位配套文件。 */
-    class ModelSet(
-        val id: String,
-        var name: String,
-        var kind: String,
-        var family: String,
-        val dir: File?,
-        val files: MutableMap<String, File> = LinkedHashMap(),
-    ) {
-        /** 主模型文件。末尾那个兜底要跳过 taesd —— 它是可选附件，
-         *  万一某个集只有 taesd，也不该把它当成主模型。 */
-        fun mainFile(): File? = files["model"] ?: files["diffusion"]
-            ?: files.entries.firstOrNull { it.key != "taesd" }?.value
-        fun sizeBytes(): Long = files.values.sumOf { it.length() }
-        fun slotCount(): Int = files.size
-    }
-
-    private fun setsDir(): File = File(File(c.filesDir, DIR_NAME), "sets").apply { mkdirs() }
-
-    private fun safeId(s: String): String {
-        val t = s.replace(Regex("[^A-Za-z0-9._-]"), "_").trim('_').take(48)
-        return t.ifEmpty { "set" }
-    }
-
-    private fun newSetId(base: String): String {
-        val b = safeId(base)
-        var id = b
-        var i = 2
-        while (File(setsDir(), id).exists()) { id = "$b-$i"; i++ }
-        return id
-    }
-
-    private fun writeSetJson(s: ModelSet) {
-        val d = s.dir ?: return
-        runCatching {
-            val o = org.json.JSONObject()
-            o.put("name", s.name)
-            o.put("kind", s.kind)
-            o.put("family", s.family)
-            val a = org.json.JSONObject()
-            // 集目录里的文件只存文件名；集外的文件（旧版散落模型提升成集时会引用到）存绝对路径，
-            // 否则读回来会按集目录去拼、拼不到。两种情况靠 File.isAbsolute 区分。
-            s.files.forEach { (k, f) ->
-                val inSet = f.parentFile?.absoluteFile == d.absoluteFile
-                a.put(k, if (inSet) f.name else f.absolutePath)
-            }
-            o.put("slots", a)
-            File(d, "ponko-set.json").writeText(o.toString())
-        }
-    }
-
-    private fun readSetJson(dir: File): ModelSet? {
-        val o = runCatching { org.json.JSONObject(File(dir, "ponko-set.json").readText()) }.getOrNull() ?: return null
-        val files = LinkedHashMap<String, File>()
-        o.optJSONObject("slots")?.let { a ->
-            val keys = a.keys()
-            while (keys.hasNext()) {
-                val k = keys.next()
-                val fn = a.optString(k, "")
-                val stored = File(fn)
-                val f = if (stored.isAbsolute) stored else File(dir, fn)
-                if (fn.isNotEmpty() && f.isFile) files[k] = f
-            }
-        }
-        return ModelSet(dir.name, o.optString("name", dir.name),
-            o.optString("kind", KIND_MULTI), o.optString("family", "custom"), dir, files)
-    }
-
     /** 私有目录里已有的绘图模型：新式模型集（draw/sets 下的子目录）+ 旧版散落的单文件 gguf */
-    fun listSets(): List<ModelSet> {
-        val out = ArrayList<ModelSet>()
-        setsDir().listFiles { f -> f.isDirectory }?.sortedByDescending { it.lastModified() }?.forEach { d ->
-            readSetJson(d)?.let { out.add(it) }
-        }
-        val loose = File(c.filesDir, DIR_NAME).listFiles { f ->
-            f.isFile && f.name.endsWith(".gguf", true) && !f.name.startsWith(".")
-        }?.sortedByDescending { it.lastModified() } ?: emptyList()
-        val looseVae = loose.firstOrNull { it.name.contains("vae", true) }
-        for (f in loose) {
-            if (f === looseVae) continue
-            val files = LinkedHashMap<String, File>()
-            files["model"] = f
-            if (looseVae != null) files["vae"] = looseVae
-            out.add(ModelSet("legacy:${f.name}", f.nameWithoutExtension, KIND_SINGLE, "other", null, files))
-        }
-        return out
-    }
+    fun listSets(): List<ModelSet> = setStore.listSets()
 
     /** 启动后兜底：把上次选中的模型集（或第一个）设为当前 */
     fun ensureActiveSet() {
         if (activeSet != null) return
         val all = listSets()
         if (all.isEmpty()) return
-        val saved = prefs().getString(KEY_SEL_SET, null)
+        val saved = setStore.selectedSetId()
         val pick = all.firstOrNull { it.id == saved } ?: all.first()
         selectSet(pick)
     }
@@ -1832,14 +1743,12 @@ class DrawPage(
         activeSet = s
         mainModel = s.mainFile()
         vaeModel = s.files["vae"]
-        prefs().edit().putString(KEY_SEL_SET, s.id).apply()
+        setStore.selectSet(s)
     }
 
     fun deleteSet(s: ModelSet): Boolean {
-        val ok = if (s.dir != null) runCatching { s.dir.deleteRecursively() }.getOrDefault(false)
-        else s.files.values.all { runCatching { it.delete() }.getOrDefault(false) }
+        val ok = setStore.deleteSet(s)
         if (activeSet?.id == s.id) activeSet = null
-        if (prefs().getString(KEY_SEL_SET, null) == s.id) prefs().edit().remove(KEY_SEL_SET).apply()
         return ok
     }
 
@@ -1857,19 +1766,19 @@ class DrawPage(
         // La ruta se guarda como preferencia global (no en el set): los sets "legacy"
         // (archivos sueltos) no tienen directorio donde escribir el JSON, y el
         // TAESD sirve igual para cualquier modelo SD1.x/SD2.x.
-        prefs().edit().putString(KEY_TAESD_PATH, f.absolutePath).apply()
+        setStore.setTaesdPath(f.absolutePath)
         // Y ademas se apunta en el set activo, si es uno con directorio (multi-archivo).
         val s = activeSetOrSelected()
         if (s != null && s.dir != null) {
             s.files["taesd"] = f
-            writeSetJson(s)
+            setStore.writeSetJson(s)
         }
         return true
     }
 
     /** Ruta del TAESD activa (preferencia global) o null. */
     fun activeTaesdPath(): String? {
-        val pref = prefs().getString(KEY_TAESD_PATH, null)
+        val pref = setStore.taesdPath()
         if (!pref.isNullOrBlank() && File(pref).exists()) return pref
         // El set activo puede tener su propio taesd (multi-archivo).
         val s = activeSetOrSelected()
@@ -1879,16 +1788,12 @@ class DrawPage(
     }
 
     /** 路径 del TAESD descargado, o null si no está. */
-    fun taesdFile(): File? {
-        val f = File(File(File(c.filesDir, DIR_NAME), "taesd"), "taesd.safetensors")
-        return if (f.exists() && f.length() > TAESD_MIN_BYTES) f else null
-    }
+    fun taesdFile(): File? = setStore.taesdFile()
 
     /** 只把槽位从集里摘掉，不删文件（同一个文件可能被多个槽位共用） */
     fun clearSlot(key: String) {
         val s = activeSetOrSelected() ?: return
-        s.files.remove(key)
-        writeSetJson(s)
+        setStore.clearSlot(s, key)
     }
 
     /** 模型集摘要：名字 · 单/多文件 · 家族 · 文件数 · 体积 */
@@ -1928,8 +1833,8 @@ class DrawPage(
             val cur = activeSet
             val useSet: ModelSet = when {
                 pendingNewSet || cur == null -> {
-                    val id = newSetId(name.substringBeforeLast('.'))
-                    val dir = File(setsDir(), id).apply { mkdirs() }
+                    val dir = setStore.createSetDir(name.substringBeforeLast('.'))
+                    val id = dir.name
                     ModelSet(id, id, pendingKind, pendingFamily, dir).also {
                         activeSet = it
                         pendingNewSet = false
@@ -1938,7 +1843,7 @@ class DrawPage(
                 cur.dir == null -> {
                     // 旧版散落单文件（不是模型集）：要补配套文件就得先提升成模型集。
                     // 主模型动辄几 GB，**不复制、不搬动**——沿用原文件，写 json 时记绝对路径引用。
-                    val dir = File(setsDir(), newSetId(cur.name)).apply { mkdirs() }
+                    val dir = setStore.createSetDir(cur.name)
                     ModelSet(dir.name, cur.name, cur.kind, cur.family, dir, LinkedHashMap(cur.files)).also {
                         activeSet = it
                     }
@@ -1983,7 +1888,7 @@ class DrawPage(
                 }
             }
             useSet.files[key] = dest
-            writeSetJson(useSet)
+            setStore.writeSetJson(useSet)
             selectSet(useSet)
             withContext(Dispatchers.Main) {
                 statusText.text = c.getString(R.string.s_161)
@@ -2418,7 +2323,7 @@ class DrawPage(
      * SeekBar progress 0..94 mapea a 0.05..0.99。
      */
     private fun currentUpscaleStrength(): Float =
-        (upscaleStrengthBar.progress / 100f + 0.05f).coerceIn(0.05f, 0.99f)
+        DrawParamsLogic.upscaleStrength(upscaleStrengthBar.progress)
 
     /** VAE tiling 相关的行只在开关打开时显示 */
     private fun refreshVaeTilingRows() {
@@ -2431,8 +2336,8 @@ class DrawPage(
     /** 读 VAE tiling 的配置（关掉时返回 null，让引擎走整帧解码） */
     private fun vaeTilingParams(): Triple<Boolean, Int, Float>? {
         if (!::vaeTilingCheck.isInitialized || !vaeTilingCheck.isChecked) return null
-        val size = vaeTileSizeEdit.text.toString().toIntOrNull()?.coerceIn(64, 2048) ?: 512
-        val overlap = vaeTileOverlapEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 0.5f) ?: 0.25f
+        val size = DrawParamsLogic.vaeTileSize(vaeTileSizeEdit.text.toString())
+        val overlap = DrawParamsLogic.vaeTileOverlap(vaeTileOverlapEdit.text.toString())
         return Triple(true, size, overlap)
     }
 
@@ -2488,10 +2393,9 @@ class DrawPage(
         onStatus?.invoke(c.getString(R.string.s_525), false)
 
         // 2× 尺寸，夹到 2048（sd.cpp 上限）；步数用当前值，img2img 步数少但要够
-        val w = (src.width * 2).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val hgt = (src.height * 2).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val steps = stepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20
-        val cfg = cfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f
+        val (w, hgt) = DrawParamsLogic.upscaleTargetSize(src.width, src.height)
+        val steps = DrawParamsLogic.steps(stepsEdit.text.toString())
+        val cfg = DrawParamsLogic.cfg(cfgEdit.text.toString())
         val seed = seedEdit.text.toString().toLongOrNull()?.takeIf { it >= 0 } ?: System.currentTimeMillis()
         val strength = currentUpscaleStrength()   // 用户可调：0.05 = 几乎原图, 0.99 = 几乎重画
 
@@ -2507,8 +2411,9 @@ class DrawPage(
             SdCppEngine.HiresUpscaler.LATENT
         }
         // 原生 hires：第一轮尺寸 = 原图尺寸，目标 = 2×
-        val firstW = if (useNativeHires) ((src.width / 64) * 64).coerceIn(64, 2048) else w
-        val firstH = if (useNativeHires) ((src.height / 64) * 64).coerceIn(64, 2048) else hgt
+        val firstPass = if (useNativeHires) DrawParamsLogic.hiresFirstPassSize(src.width, src.height) else null
+        val firstW = firstPass?.first ?: w
+        val firstH = firstPass?.second ?: hgt
         // 原生 hires 的第二轮降噪强度直接用同一个 slider（0.05–0.99）
         // hires 原生用的是 denoising_strength：0 = 完全保留放大后的 latent（只放大不加细节），
         // 1 = 全部重新采样（构图会丢）。slider 的 0.05–0.99 直接传过去太极端，
@@ -2517,7 +2422,7 @@ class DrawPage(
         //   0.35 = 平衡（默认）
         //   0.55 = 明显加细节（可能动构图）
         val hiresDenoise = if (useNativeHires) {
-            (0.15f + (strength - 0.05f) * (0.40f / 0.94f)).coerceIn(0.10f, 0.60f)
+            DrawParamsLogic.hiresDenoise(strength)
         } else 0.7f
         val vaeTiling = vaeTilingParams()
 
@@ -2560,7 +2465,7 @@ class DrawPage(
                 val negative = negEdit.text.toString()
                 val sampler = pickSampler(lora != null)
                 val scheduler = pickScheduler(lora != null)
-                val loraScale = loraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f
+                val loraScale = DrawParamsLogic.loraScale(loraScaleEdit.text.toString())
 
                 val bmp = withContext(Dispatchers.IO) {
                     if (useNativeHires) {
@@ -2681,13 +2586,13 @@ class DrawPage(
         // 绘图接口正在出图时别插队：同一个 native 句柄同时跑两个任务会错乱
         if (DrawCore.busy) throw IllegalStateException(c.getString(R.string.s_428))
         val vaeTiling = vaeTilingParams()
-        val steps = stepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20
-        val cfg = cfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f
+        val steps = DrawParamsLogic.steps(stepsEdit.text.toString())
+        val cfg = DrawParamsLogic.cfg(cfgEdit.text.toString())
         val seed = seedEdit.text.toString().toLongOrNull() ?: -1L
         val useSeed = if (seed < 0) System.currentTimeMillis() else seed
         // 宽高：sd.cpp 要求 64 的倍数，向下取整；夹到 64~2048 防止手滑
-        val w = (widthEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val hgt = (heightEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
+        val w = DrawParamsLogic.size(widthEdit.text.toString())
+        val hgt = DrawParamsLogic.size(heightEdit.text.toString())
         onProgress(0, steps)
         cancelRequested = false
 
@@ -2704,7 +2609,7 @@ class DrawPage(
         val sampler = pickSampler(lora != null)
         val scheduler = pickScheduler(lora != null)
         // LoRA 权重：0 = 不挂，1.0 是标准
-        val loraScale = loraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f
+        val loraScale = DrawParamsLogic.loraScale(loraScaleEdit.text.toString())
 
         // 对话页出图不走界面的 setGenerating，这里手动上报一句：
         // 否则 API 侧不知道界面在出图，会插进来抢同一个 native 句柄
@@ -2877,13 +2782,13 @@ class DrawPage(
         onProgress: (Int, Int) -> Unit = { _, _ -> },
         onPreview: ((Int, Int, Int, ByteArray) -> Unit)? = null,
     ): ImageData {
-        val steps = i2iStepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20
-        val cfg = i2iCfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f
+        val steps = DrawParamsLogic.steps(i2iStepsEdit.text.toString())
+        val cfg = DrawParamsLogic.cfg(i2iCfgEdit.text.toString())
         val seed = i2iSeedEdit.text.toString().toLongOrNull() ?: -1L
         val useSeed = if (seed < 0) System.currentTimeMillis() else seed
-        val w = (i2iWidthEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val hgt = (i2iHeightEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val strength = i2iStrengthEdit.text.toString().toFloatOrNull()?.coerceIn(0.05f, 0.99f) ?: 0.75f
+        val w = DrawParamsLogic.size(i2iWidthEdit.text.toString())
+        val hgt = DrawParamsLogic.size(i2iHeightEdit.text.toString())
+        val strength = DrawParamsLogic.i2iStrength(i2iStrengthEdit.text.toString())
         val vaeTiling = vaeTilingParams()
         onProgress(0, steps)
         cancelRequested = false
@@ -2897,7 +2802,7 @@ class DrawPage(
         val negative = i2iNegEdit.text.toString()
         val sampler = pickI2iSampler(lora != null)
         val scheduler = pickI2iScheduler(lora != null)
-        val loraScale = i2iLoraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f
+        val loraScale = DrawParamsLogic.loraScale(i2iLoraScaleEdit.text.toString())
 
         val bmp = withContext(Dispatchers.IO) {
             val rgb = SdCppEngine.bitmapToRgb888(src)
