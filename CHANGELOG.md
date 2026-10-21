@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — catalogo y decision de recarga del tagger
+
+- **`TaggerStore` + `TaggerSession` + `TaggerSelection`**
+  (`app/src/main/java/com/yumenode/ai/draw/TaggerStore.kt`, 145 lineas)
+  - El catalogo del tagger (modelo ONNX + tabla de tags en `files/tagger/`) sale
+    de `DrawPage` a un store sin dependencias de UI; `DrawPage` baja de 3,468 a
+    3,469 lineas (el store añade la logica de recarga explicitada).
+  - `DrawPage` conserva su API publica (`listTaggerModels()`,
+    `listTaggerCsvs()`, `taggerModelFile()`, `taggerCsvFile()`,
+    `currentTaggerModelName()`, `currentTaggerCsvName()`, `selectTaggerModel()`,
+    `selectTaggerCsv()`) delegando en el store, asi que los call sites de
+    `TaggerUi` no cambian.
+  - Las claves `"selTaggerModel"` / `"selTaggerCsv"` quedan definidas **una
+    sola vez** (`TaggerStore.KEY_SEL_MODEL` / `KEY_SEL_CSV`); ya no hay
+    literales sueltos en `DrawPage`.
+  - La decision de "el tagger cargado ya sirve" se modela como
+    `TaggerSelection.isReadyWith(TaggerSession)` y la usan **los dos** call
+    sites que antesTenian la comparacion duplicada: `ensureTaggerLoaded()` y
+    `taggerReadyError()`.
+
 ### Refactor — catalogo de LoRA a un store
 
 - **`LoraStore`** (`app/src/main/java/com/yumenode/ai/draw/LoraStore.kt`, 92 lineas)
@@ -38,6 +58,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Sin cambio de comportamiento: los tests fijan los valores actuales.
 
 ### Added
+
+- **18 tests JVM para el tagger** (`TaggerStoreTest.kt`): 8 del catalogo
+  (solo se listan `.onnx` / `.csv`, ordenados por nombre; la seleccion
+  guardada por **nombre** y su caida al primero cuando el fichero ya no
+  existe) y 10 de la decision de recarga (nada cargado, modelo distinto,
+  tabla distinta, cambio de backend GPU <-> CPU, y el caso en que el engine no
+  tiene sesion aunque los nombres coincidan).
 
 - **13 tests JVM para el catalogo de LoRA** (`LoraStoreTest.kt`, 161 lineas):
   solo se listan los `.safetensors` (extension sin distinguir mayusculas) y
@@ -96,11 +123,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **79/79** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **97/97** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
-  `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `ThreadRecommendationTest` 3;
-  0 fallos, 0 errores, 0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73,194,559 bytes)
+  `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `TaggerStoreTest` 8,
+  `TaggerSessionTest` 10, `ThreadRecommendationTest` 3; 0 fallos, 0 errores,
+  0 omitidos)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73,201,435 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - Verificación en dispositivo: **pendiente** — no había ningún dispositivo

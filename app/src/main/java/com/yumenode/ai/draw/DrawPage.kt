@@ -291,6 +291,12 @@ class DrawPage(
      */
     private val loraStore: LoraStore = LoraStore(c.filesDir, prefs())
 
+    /**
+     * Catalogo del tagger (modelo ONNX + tabla de tags) y decision de recarga.
+     * Extraido de esta clase para que ambas reglas queden testeables.
+     */
+    private val taggerStore: TaggerStore = TaggerStore(c.filesDir, prefs())
+
     /** SD 管线就绪时回调（MainActivity 借此切到绘图模式） */
     var onPipelineReady: (() -> Unit)? = null
 
@@ -1309,12 +1315,17 @@ class DrawPage(
     private fun ensureTaggerLoaded(): String? {
         val model = taggerModelFile() ?: return c.getString(R.string.s_228)
         val csv = taggerCsvFile() ?: return c.getString(R.string.s_228)
-        val (mName, cName) = TaggerEngine.fileNames()
-        if (TaggerEngine.isLoaded() && mName == model.name && cName == csv.name &&
-            TaggerEngine.loadedWithGpu() == useGpu) return null
+        val sel = TaggerSelection(model.name, csv.name, useGpu)
+        if (sel.isReadyWith(currentTaggerSession())) return null
         // 线程数走全局设置（InferConfig）——与对话 gguf、打标共用同一个值
         val threads = InferConfig.threads(c)
         return TaggerEngine.load(c, model, csv, useGpu, threads)
+    }
+
+    /** Estado del tagger en memoria (lo que hay cargado ahora mismo). */
+    private fun currentTaggerSession(): TaggerSession {
+        val (mName, cName) = TaggerEngine.fileNames()
+        return TaggerSession(TaggerEngine.isLoaded(), mName, cName, TaggerEngine.loadedWithGpu())
     }
 
     /**
@@ -1324,10 +1335,8 @@ class DrawPage(
     private fun taggerReadyError(): String? {
         val model = taggerModelFile() ?: return c.getString(R.string.s_228)
         val csv = taggerCsvFile() ?: return c.getString(R.string.s_228)
-        if (!TaggerEngine.isLoaded()) return c.getString(R.string.s_259)
-        val (mName, cName) = TaggerEngine.fileNames()
-        if (mName != model.name || cName != csv.name || TaggerEngine.loadedWithGpu() != useGpu)
-            return c.getString(R.string.s_259)
+        val sel = TaggerSelection(model.name, csv.name, useGpu)
+        if (!sel.isReadyWith(currentTaggerSession())) return c.getString(R.string.s_259)
         return null
     }
 
@@ -1408,40 +1417,32 @@ class DrawPage(
     // ---- 打标模型文件（模型页导入，这里只读） ----
 
     /** 打标目录：filesDir/tagger */
-    private fun taggerDir(): File = File(c.filesDir, TAGGER_DIR).apply { mkdirs() }
+    private fun taggerDir(): File = taggerStore.dir()
 
     /** 已导入的打标模型（.onnx），按名字排序 */
-    fun listTaggerModels(): List<File> =
-        taggerDir().listFiles { f -> f.isFile && f.name.endsWith(".onnx", true) }?.sortedBy { it.name } ?: emptyList()
+    fun listTaggerModels(): List<File> = taggerStore.listModels()
 
     /** 已导入的标签表（.csv） */
-    fun listTaggerCsvs(): List<File> =
-        taggerDir().listFiles { f -> f.isFile && f.name.endsWith(".csv", true) }?.sortedBy { it.name } ?: emptyList()
+    fun listTaggerCsvs(): List<File> = taggerStore.listCsvs()
 
     /** 当前选中的打标模型（优先上次选择的，否则第一个） */
-    fun taggerModelFile(): File? = pickSelected(listTaggerModels(), "selTaggerModel")
+    fun taggerModelFile(): File? = taggerStore.modelFile()
 
     /** 当前选中的标签表 */
-    fun taggerCsvFile(): File? = pickSelected(listTaggerCsvs(), "selTaggerCsv")
+    fun taggerCsvFile(): File? = taggerStore.csvFile()
 
-    private fun pickSelected(all: List<File>, key: String): File? {
-        if (all.isEmpty()) return null
-        val saved = prefs().getString(key, null)
-        return all.firstOrNull { it.name == saved } ?: all.first()
-    }
-
-    fun currentTaggerModelName(): String? = taggerModelFile()?.name
-    fun currentTaggerCsvName(): String? = taggerCsvFile()?.name
+    fun currentTaggerModelName(): String? = taggerStore.currentModelName()
+    fun currentTaggerCsvName(): String? = taggerStore.currentCsvName()
 
     /** 选择打标模型（换模型就卸载旧的，下次打标时重新加载） */
     fun selectTaggerModel(f: File) {
-        prefs().edit().putString("selTaggerModel", f.name).apply()
+        taggerStore.selectModel(f)
         TaggerEngine.unload()
     }
 
     /** 选择标签表 */
     fun selectTaggerCsv(f: File) {
-        prefs().edit().putString("selTaggerCsv", f.name).apply()
+        taggerStore.selectCsv(f)
         TaggerEngine.unload()
     }
 
