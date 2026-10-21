@@ -74,7 +74,7 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
     var loraBox: LinearLayout? = null
         private set
 
-    private fun dp(p: Int): Int = UiHelpers.dp(p, activity)
+    private fun dp(p: Int): Int = UiScale.dpToPx(p, activity.resources.displayMetrics.density)
     private fun getString(resId: Int): String = activity.getString(resId)
     private fun matchWrap(topMargin: Int = 0) =
         LinearLayout.LayoutParams(

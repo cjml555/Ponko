@@ -6,6 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — una sola aritmetica de dp a px
+
+- **`UiScale`** (`app/src/main/java/com/yumenode/ai/UiScale.kt`)
+  - La conversion dp → px estaba **copiada en 7 sitios**: `UiExt.dp()`,
+    `UiHelpers.dp()`, `ApiBlockBuilder.dp()`, `GalleryPage.dp()`,
+    `ModelsPage.dp()`, `SegmentedSwitch.dpV()` y `ChatImageHandler.dp()`.
+    Todas pasan ahora por `UiScale`.
+  - Se conservaron **las dos convenciones** que coexistian, explicitas:
+    truncado (la mayoria) y redondeo (`ChatImageHandler`). La diferencia es
+    real: a 400dpi (densidad 2.5) un 3dp son 7.5px — truncar da 7 y redondear
+    da 8. La variante de redondeo tambien habia reaparecido como copia en
+    `ChatImageHandler`, sin relacion visible con la fuente comun.
+  - La aritmetica vive fuera de Android para que se pueda comprobar en JVM:
+    `Context.dp()` depende de `resources`, que no existe en un test plano.
+
+### Added
+
+- **12 tests JVM de la escala** (`UiScaleTest.kt`): truncado y redondeo (que
+  difieren en 1px como maximo, y solo en valores fraccionarios), el variante
+  en coma flotante para tamanos de texto y grosores de linea, y el alineado a
+  multiplo de paso que exigen los multiples de 64 de sd.cpp.
+
 ### Refactor — presupuesto de contexto a un objeto puro
 
 - **`ContextBudget`** (`app/src/main/java/com/yumenode/ai/ContextBudget.kt`, 81 lineas)
@@ -208,13 +230,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **116/116** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **128/128** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
   `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `TaggerStoreTest` 8,
   `TaggerSessionTest` 10, `TaggerReadyEquivalenceTest` 2,
-  `DrawFileImporterTest` 5, `ContextBudgetTest` 12,
+  `DrawFileImporterTest` 5, `ContextBudgetTest` 12, `UiScaleTest` 12,
   `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73299399 bytes)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73300275 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - **Verificación en dispositivo** (Motorola Edge 50 Fusion, Android 16,
@@ -246,6 +268,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Envío de un mensaje de chat** (ejercita el presupuesto de contexto):
   el mensaje sale en el hilo, la app sigue viva y el buffer de crash queda
   vacio.
+- **Revisión visual de la unificación de `dp`** (afecta a los margenes de
+  toda la UI): se recorrieron las paginas de dibujo, modelos, galeria y
+  ajustes en el Edge 50 Fusion (densidad 400dpi). Todo renderiza sin
+  solapamientos ni textos cortados; en la captura de la pagina de dibujo los
+  presets de tamaño (64/128/256/384/512/Personalizado) quedan alineados y los
+  margenes son identicos a antes del refactor.
 
 ### Refactor — page extraction (incremental monolith reduction)
 

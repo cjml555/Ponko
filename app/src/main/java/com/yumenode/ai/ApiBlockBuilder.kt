@@ -182,7 +182,7 @@ class ApiBlockBuilder(
             .coerceIn(1024, 65535)
 
     private fun dp(v: Int): Int =
-        (v * activity.resources.displayMetrics.density).toInt()
+        UiScale.dpToPx(v, activity.resources.displayMetrics.density)
 
     private fun matchWrap(): LinearLayout.LayoutParams =
         LinearLayout.LayoutParams(

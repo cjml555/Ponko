@@ -58,7 +58,7 @@ internal class GalleryPage(
     private var countView: TextView? = null
     private var permButton: TextView? = null
 
-    private fun dp(v: Int) = (v * activity.resources.displayMetrics.density).toInt()
+    private fun dp(v: Int) = UiScale.dpToPx(v, activity.resources.displayMetrics.density)
 
     fun build(): View {
         val sv = ScrollView(activity).apply {

@@ -185,10 +185,9 @@ class ChatImageHandler(
 
     // ── cápsulas de utilidad ─
 
-    private fun dp(d: Int): Int {
-        val scale = ctx.resources.displayMetrics.density
-        return (d * scale + 0.5f).toInt()
-    }
+    /** dp → px redondeando (aqui un pixel de diferencia se nota; ver [UiScale]). */
+    private fun dp(d: Int): Int =
+        UiScale.dpToPxRounded(d, ctx.resources.displayMetrics.density)
 
     private fun matchWrap() =
         LinearLayout.LayoutParams(

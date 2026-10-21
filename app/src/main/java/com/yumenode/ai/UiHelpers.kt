@@ -22,11 +22,10 @@ class UiHelpers {
         }
 
         /**
-         * DP to pixel conversion helper
+         * DP to pixel conversion helper (truncando; ver [UiScale]).
          */
-        fun dp(value: Int, context: Context): Int {
-            return (value * context.resources.displayMetrics.density).toInt()
-        }
+        fun dp(value: Int, context: Context): Int =
+            UiScale.dpToPx(value, context.resources.displayMetrics.density)
 
         /** Number input field helper */
         fun numField(
