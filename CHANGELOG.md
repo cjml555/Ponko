@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — catalogo de LoRA a un store
+
+- **`LoraStore`** (`app/src/main/java/com/yumenode/ai/draw/LoraStore.kt`, 92 lineas)
+  - El catalogo de LoRA (listado, seleccion activa, borrado) sale de `DrawPage`
+    a un store sin dependencias de UI; `DrawPage` baja de 3,472 a 3,468 lineas.
+  - `DrawPage` conserva su API publica (`listLoras()`, `hasLora()`,
+    `activeLora()`, `selectLora()`, `deleteLora()`) delegando en el store, asi
+    que los call sites de `MainActivity` no cambian.
+  - La clave de preferencia `"selLora"` queda definida **una sola vez**
+    (`LoraStore.KEY_SEL_LORA`); ya no hay literales sueltos en `DrawPage`.
+  - La regla de prioridad de la seleccion (sesion > guardada > primera) queda
+    documentada y fijada por tests, incluida la caida cuando el fichero
+    seleccionado ya no esta en disco.
+
 ### Refactor — logica de parametros de dibujo a un objeto puro
 
 - **`DrawParamsLogic`** (`app/src/main/java/com/yumenode/ai/draw/DrawParamsLogic.kt`, 136 lineas)
@@ -24,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Sin cambio de comportamiento: los tests fijan los valores actuales.
 
 ### Added
+
+- **13 tests JVM para el catalogo de LoRA** (`LoraStoreTest.kt`, 161 lineas):
+  solo se listan los `.safetensors` (extension sin distinguir mayusculas) y
+  ordenados por nombre; la prioridad de la seleccion (la de la sesion gana
+  sobre la guardada, y la guardada sobre la primera); la caida a la siguiente
+  opcion cuando el fichero elegido ya no existe; la seleccion guardada por
+  **nombre** (no por ruta, para sobrevivir a una restauracion de copia de
+  seguridad); y el borrado.
 
 - **21 tests JVM para la logica de parametros** (`DrawParamsLogicTest.kt`, 183 lineas):
   alineado a multiplos de 64 y acotado a 64..2048, defaults de cada parametro,
@@ -74,11 +96,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **66/66** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **79/79** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
-  `DrawParamsLogicTest` 21, `ThreadRecommendationTest` 3; 0 fallos, 0 errores,
-  0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73,192,435 bytes)
+  `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `ThreadRecommendationTest` 3;
+  0 fallos, 0 errores, 0 omitidos)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73,194,559 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - Verificación en dispositivo: **pendiente** — no había ningún dispositivo

@@ -285,6 +285,12 @@ class DrawPage(
     /** 当前选中的 LoRA（null = 自动取目录里第一个） */
     private var loraFile: File? = null
 
+    /**
+     * Catalogo de LoRA descargadas/importadas.
+     * Extraido de esta clase para que la regla de seleccion quede testeable.
+     */
+    private val loraStore: LoraStore = LoraStore(c.filesDir, prefs())
+
     /** SD 管线就绪时回调（MainActivity 借此切到绘图模式） */
     var onPipelineReady: (() -> Unit)? = null
 
@@ -1573,25 +1579,15 @@ class DrawPage(
     // ================= LoRA =================
 
     /** LoRA 目录：filesDir/draw/lora */
-    private fun loraDir(): File = File(File(c.filesDir, DIR_NAME), "lora").apply { mkdirs() }
+    private fun loraDir(): File = loraStore.loraDir()
 
     /** 已下载的 LoRA 列表（.safetensors） */
-    fun listLoras(): List<File> =
-        loraDir().listFiles { f -> f.isFile && f.name.endsWith(".safetensors", ignoreCase = true) }
-            ?.sortedBy { it.name } ?: emptyList()
+    fun listLoras(): List<File> = loraStore.list()
 
-    fun hasLora(): Boolean = listLoras().isNotEmpty()
+    fun hasLora(): Boolean = loraStore.hasAny()
 
     /** 当前生效的 LoRA（优先用户选中的，其次上次选中的，最后取第一个） */
-    fun activeLora(): File? {
-        val all = listLoras()
-        if (all.isEmpty()) return null
-        val sel = loraFile
-        if (sel != null && sel.isFile && all.any { it.absolutePath == sel.absolutePath }) return sel
-        val saved = prefs().getString("selLora", null)
-        if (saved != null) all.firstOrNull { it.name == saved }?.let { loraFile = it; return it }
-        return all.first()
-    }
+    fun activeLora(): File? = loraStore.active(loraFile)
 
     /** UI 高亮用：当前生效的 LoRA 名 */
     fun currentLoraName(): String? = activeLora()?.name
@@ -1599,7 +1595,7 @@ class DrawPage(
     /** 选中某个 LoRA（持久化选择） */
     fun selectLora(f: File) {
         loraFile = f
-        prefs().edit().putString("selLora", f.name).apply()
+        loraStore.select(f)
         refreshLoraHint()
         // Una LoRA de aceleracion (Hyper-SD / LCM / Lightning) cambia los pasos utiles:
         // aplicamos el preset de su familia para no generar con 20 pasos.
@@ -1616,12 +1612,12 @@ class DrawPage(
         else c.getString(R.string.v_027, (a.nameWithoutExtension), (size))
     }
 
-    fun deleteLora(f: File): Boolean = runCatching {
+    fun deleteLora(f: File): Boolean {
         if (loraFile?.absolutePath == f.absolutePath) loraFile = null
-        val ok = f.delete()
+        val ok = loraStore.delete(f)
         refreshLoraHint()
-        ok
-    }.getOrDefault(false)
+        return ok
+    }
 
     private fun refreshLoraHint() {
         try {
