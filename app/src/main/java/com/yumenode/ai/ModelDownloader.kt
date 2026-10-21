@@ -541,6 +541,32 @@ object ModelDownloader {
         MODEL_CATALOG.values.filter { it.format == format }.toList()
 
     /** Tamaño esperado (Content-Length del catálogo) para un nombre de archivo. */
+    /**
+     * Fichero que anota que tramos de una descarga por rangos ya se han
+     * completado. Mientras exista, la descarga esta INCOMPLETA: el fichero
+     * de modelo esta preasignado a su tamano total (para poder escribir en
+     * cualquier offset), asi que su tamano NO dice si esta completo.
+     *
+     * Al terminar la descarga, este fichero se borra: su ausencia es la
+     * senal de "todo descargado".
+     */
+    fun partialMarkerFor(file: File): File =
+        File(file.parentFile, file.name + ".parts")
+
+    /**
+     * ¿Esta el modelo descargado de verdad?
+     *
+     * Un fichero preasignado por una descarga por rangos tiene el tamano
+     * final aunque le falten bytes, asi que ademas de mirar el tamano hay
+     * que comprobar que no queda ninguna descarga parcial pendiente.
+     */
+    fun isModelDownloaded(context: Context, modelKey: String): Boolean {
+        val info = resolveInfo(modelKey) ?: return false
+        val modelFile = File(info.baseDir(context), info.fileName)
+        if (partialMarkerFor(modelFile).exists()) return false
+        return modelFile.exists() && modelFile.length() > info.sizeBytes * EXISTING_FILE_SIZE_RATIO
+    }
+
     fun expectedSizeForFileName(fileName: String): Long? =
         MODEL_CATALOG.values
             .firstOrNull { it.fileName.substringAfterLast('/') == fileName }
@@ -551,14 +577,11 @@ object ModelDownloader {
      * Un modelo importado a mano (no catalogado) se considera completo: no hay
      * con qué compararlo.
      */
-    fun isIncomplete(file: File): Boolean =
-        DownloadIntegrity.isIncomplete(file, expectedSizeForFileName(file.name), EXISTING_FILE_SIZE_RATIO)
-
-    /** Verifica si un modelo ya está descargado */
-    fun isModelDownloaded(context: Context, modelKey: String): Boolean {
-        val info = resolveInfo(modelKey) ?: return false
-        val modelFile = File(info.baseDir(context), info.fileName)
-        return modelFile.exists() && modelFile.length() > info.sizeBytes * EXISTING_FILE_SIZE_RATIO
+    fun isIncomplete(file: File): Boolean {
+        // Una descarga por rangos en curso deja el marcador `.parts`: el
+        // fichero esta preasignado y su tamano no dice nada.
+        if (partialMarkerFor(file).exists()) return true
+        return DownloadIntegrity.isIncomplete(file, expectedSizeForFileName(file.name), EXISTING_FILE_SIZE_RATIO)
     }
 
     /** Verifica integridad del archivo descargado. Delegado en [DownloadIntegrity]. */
@@ -614,8 +637,12 @@ object ModelDownloader {
         val modelFile = File(modelsDir, info.fileName)
         modelFile.parentFile?.mkdirs()
 
-        // Si ya existe y tiene tamaño razonable, saltar
-        if (modelFile.exists() && modelFile.length() > info.sizeBytes * EXISTING_FILE_SIZE_RATIO) {
+        // Si ya existe y tiene tamaño razonable, saltar.
+        // PERO: si hay una descarga parcial en curso (fichero `.parts`), el
+        // modelo NO esta descargado: el fichero esta preasignado a su tamano
+        // final y su tamano no dice nada. En ese caso se reanuda.
+        val hasPartial = partialMarkerFor(modelFile).exists()
+        if (!hasPartial && modelFile.exists() && modelFile.length() > info.sizeBytes * EXISTING_FILE_SIZE_RATIO) {
             Log.i(TAG, "Modelo ya existe: ${modelFile.absolutePath}")
             if (verifyChecksum(modelFile, info.sha256)) {
                 DownloadNotifier.complete(context, info.name)
@@ -657,6 +684,9 @@ object ModelDownloader {
                         } else {
                             lastError = "Checksum inválido"
                             modelFile.delete()
+                            // El marcador tambien: si no, la proxima vez se
+                            // creeria que hay una descarga parcial valida.
+                            partialMarkerFor(modelFile).delete()
                         }
                     } else if (result is DownloadResult.Cancelled) {
                         onComplete(result)
@@ -668,7 +698,10 @@ object ModelDownloader {
                 } catch (e: Exception) {
                     lastError = "Excepción: ${e.message}"
                     Log.e(TAG, "Error en intento $attempt: $lastError", e)
-                    if (modelFile.exists()) modelFile.delete()
+                    // NO se borra el fichero ni el marcador `.parts`: los
+                    // tramos ya descargados se conservan y el siguiente
+                    // intento los continua en vez de repetir el fichero
+                    // entero desde cero.
                 }
 
                 // Reintento con backoff exponencial
@@ -701,44 +734,34 @@ object ModelDownloader {
         modelsDir: File,
         onProgress: ProgressCallback
     ): DownloadResult = withContext(Dispatchers.IO) {
-        var connection: java.net.HttpURLConnection? = null
-        var input: java.io.InputStream? = null
-        var output: FileOutputStream? = null
-
         try {
-            val url = URL(info.url)
-            connection = url.openConnection() as java.net.HttpURLConnection
-            connection.connectTimeout = 30000
-            connection.readTimeout = 60000
-            connection.requestMethod = "GET"
-            connection.instanceFollowRedirects = true
-
-            val responseCode = connection.responseCode
-            if (responseCode != 200) {
-                return@withContext DownloadResult.Failure("HTTP $responseCode: ${connection.responseMessage}")
-            }
-
-            val totalSize = connection.contentLengthLong
-            input = connection.getInputStream()
-            output = FileOutputStream(destFile)
-
-            val buffer = ByteArray(CHUNK_SIZE)
-            var downloaded = 0L
-            var lastProgressTime = System.currentTimeMillis()
-            var lastProgressBytes = 0L
+            // Descarga por rangos: el fichero se pide en varios tramos en
+            // paralelo y se ensambla. Si se interrumpe, se reanuda desde el
+            // ultimo tramo completo (queda anotado en un `.parts` al lado).
+            //
+            // Si el servidor no admite rangos, `RangedDownloader` cae por su
+            // cuenta a la descarga de un solo flujo: el resultado es el
+            // mismo, solo que sin paralelismo.
             val startTime = System.currentTimeMillis()
+            var lastProgressTime = 0L
 
-            while (!cancelled.get()) {
-                val read = input.read(buffer)
-                if (read == -1) break
-                output.write(buffer, 0, read)
-                downloaded += read
-
-                val now = System.currentTimeMillis()
-                if (now - lastProgressTime > PROGRESS_THROTTLE_MS && totalSize > 0) {
-                    val snap = DownloadProgress.compute(downloaded, totalSize, now - startTime)
-
-                    // Callback en hilo principal
+            val downloader = RangedDownloader(
+                bufferSize = CHUNK_SIZE,
+                connectTimeoutMs = 30000,
+                readTimeoutMs = 60000,
+            )
+            val result = downloader.download(
+                url = info.url,
+                destFile = destFile,
+                totalBytes = info.sizeBytes,
+                onProgress = { downloaded, total ->
+                    val now = System.currentTimeMillis()
+                    // Se limita la frecuencia del callback: con 4 tramos en
+                    // paralelo llegan Updates muchisimos y cada uno
+                    // repinta la interfaz.
+                    if (now - lastProgressTime < PROGRESS_THROTTLE_MS && downloaded < total) return@download
+                    lastProgressTime = now
+                    val snap = DownloadProgress.compute(downloaded, total, now - startTime)
                     onProgress(ProgressInfo(
                         progress = snap.progress,
                         downloadedBytes = snap.downloadedBytes,
@@ -746,25 +769,26 @@ object ModelDownloader {
                         speedBytesPerSec = snap.speedBytesPerSec,
                         etaSeconds = snap.etaSeconds
                     ))
-                    lastProgressTime = now
-                    lastProgressBytes = downloaded
-                }
-            }
-
-            input.close()
-            output.flush()
-            output.close()
+                },
+                isCancelled = { cancelled.get() },
+            )
 
             if (cancelled.get()) {
-                destFile.delete()
+                // NO se borra el fichero: los tramos ya descargados quedan
+                // en el `.parts` y la proxima vez se reanuda.
                 return@withContext DownloadResult.Cancelled
             }
 
+            if (!result.success) {
+                return@withContext DownloadResult.Failure(result.error ?: "Error de descarga")
+            }
+
             // Verificar tamaño mínimo
-            if (!DownloadProgress.isSizeAcceptable(destFile.length(), totalSize, MIN_FILE_SIZE_RATIO)) {
+            val totalSize = destFile.length()
+            if (!DownloadProgress.isSizeAcceptable(totalSize, info.sizeBytes, MIN_FILE_SIZE_RATIO)) {
                 destFile.delete()
                 return@withContext DownloadResult.Failure(
-                    "Descarga incompleta: ${destFile.length()} / $totalSize bytes"
+                    "Descarga incompleta: $totalSize / ${info.sizeBytes} bytes"
                 )
             }
 
@@ -784,10 +808,6 @@ object ModelDownloader {
             DownloadResult.Failure("Error de red: ${e.message}")
         } catch (e: Exception) {
             DownloadResult.Failure("Error inesperado: ${e.message}")
-        } finally {
-            try { input?.close() } catch (_: Exception) {}
-            try { output?.close() } catch (_: Exception) {}
-            try { connection?.disconnect() } catch (_: Exception) {}
         }
     }
 

@@ -6,6 +6,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Descarga por rangos en paralelo con reanudacion** (`RangedDownloader.kt`,
+  `RangePlan.kt`). El fichero se pide en varios tramos HTTP `Range` a la vez
+  y se ensambla en un unico fichero; si la descarga se interrumpe, se
+  reanuda desde el ultimo tramo completo en vez de repetirlo todo.
+  - `RangePlan` decide la division: reparto uniforme (la diferencia entre el
+    tramo mayor y el menor es de 1 byte), minimo de 8 MB por tramo y 4
+    tramos en paralelo como maximo.
+  - `RangedDownloader` hace la red: sondea el servidor con `Range: bytes=0-0`
+    (un 206 significa "admite rangos", un 200 significa "no"), escribe cada
+    tramo en su offset con `FileChannel` y guarda los tramos completados en
+    un `.parts` al lado del modelo.
+  - Si el servidor no admite rangos, cae al flujo unico: el resultado es
+    identico, solo que sin paralelismo.
+  - `ModelDownloader` lo usa: la descarga de 1,7 GB del Gemma 2 2B se hizo
+    por tramos y el `.parts` se borra al completarse.
+
+### Fixed
+
+- **`HttpURLConnection` no sigue los 308 (Permanent Redirect)**, que es lo que
+  usa el mirror de HuggingFace (`hf-mirror.com` -> `huggingface.co`).
+  `RangedDownloader` sigue las redirecciones a mano (308 incluido, hasta 5
+  saltos). Sin esto la descarga por rangos fallaba con "HTTP 308" sin
+  empezar.
+- **El fichero preasignado de la descarga por rangos parecia completo.**
+  Al escribir en un offset hace falta que el fichero tenga ese tamano, asi
+  que se preasigna al tamano final: un fichero a medio descarga tiene el
+  tamano completo y su tamano no dice nada. Ahora hay un marcador `.parts`
+  al lado que delata la descarga en curso, y `isModelDownloaded()`,
+  `isIncomplete()` y el chequeo de "ya existe" lo tienen en cuenta.
+- **Los reintentos borraban el fichero y la marca de tramos**, que hacia
+  imposible reanudar. Ahora se conservan entre intentos: solo se borra todo
+  cuando el checksum falla de verdad.
+
 ### Fixed
 
 - **El splitter de razonamiento no separaba el razonamiento de DeepSeek /
@@ -338,15 +373,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **211/211** tests pasan
-  (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
-  `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `TaggerStoreTest` 8,
-  `TaggerSessionTest` 10, `TaggerReadyEquivalenceTest` 2,
-  `DrawFileImporterTest` 5, `ContextBudgetTest` 12, `UiScaleTest` 12,
-  `DownloadIntegrityTest` 19, `DownloadProgressTest` 18, `OpenAiApiTest` 28,
-  `ReasoningSplitterTest` 18, `ThreadRecommendationTest` 3;
+- `./gradlew :app:testDebugUnitTest` → **244/244** tests pasan
+  (`ChatSendLogicTest` 15, `ContextBudgetTest` 12, `DownloadIntegrityTest` 19,
+  `DownloadProgressTest` 18, `DrawFileImporterTest` 5, `OpenAiApiTest` 28,
+  `RangePlanTest` 23, `RangedDownloaderTest` 10, `ReasoningSplitterTest` 18,
+  `ThreadRecommendationTest` 3, `UiScaleTest` 12, `draw.DistilledPresetsTest` 6,
+  `draw.DrawParamsLogicTest` 21, `draw.LoraStoreTest` 13,
+  `draw.ModelSetStoreTest` 21, `draw.TaggerReadyEquivalenceTest` 2,
+  `draw.TaggerSessionTest` 10, `draw.TaggerStoreTest` 8;
   0 fallos, 0 errores, 0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73310295 bytes)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73330663 bytes)
+- **Descarga por rangos verificada en el dispositivo** (Edge 50 Fusion):
+  - Gemma 2 2B Instruct Q4_K_M (1 708 582 752 bytes) descargado por tramos.
+  - SHA-256 en el movil: `e0aee85060f168f0f2d8473d7ea41ce2f3230c1bc1374847505ea599288a7787`
+  - SHA-256 en la API de HuggingFace: `e0aee85060f168f0f2d8473d7ea41ce2f3230c1bc1374847505ea599288a7787`
+  - **Coinciden byte a byte**: el ensamblado por rangos coloca cada byte en
+    su sitio. Es la prueba que importa: un tramo en el offset equivocado
+    daria un fichero del tamano correcto pero corrupto.
+  - El marcador `.parts` se borro al terminar y el modelo aparece como
+    "Ya descargado" en el catalogo.
+  - Cargado en la app: "Modelo de chat cargado (llama.cpp · CPU · reutilizacion
+    KV)" y una inferencia real respondio "1.234.567.890" a 3,1 tok/s.
+  - Sin crash: `adb logcat -d -b crash` vacio.
+- **Ensamblado por rangos verificado contra el CDN real**: los primeros
+  300 000 bytes descargados por rangos son **identicos byte a byte** a los
+  que devuelve el servidor en una peticion normal.
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - **Verificación en dispositivo** (Motorola Edge 50 Fusion, Android 16,
