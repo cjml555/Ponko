@@ -140,9 +140,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73201435 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
-- Verificación en dispositivo: **pendiente** — no había ningún dispositivo
-  accesible por ADB (`adb devices` vacío; barrido de `192.168.1.0/24:5555` sin
-  resultados), así que el gate de UI en hardware queda sin ejecutar.
+- **Verificación en dispositivo** (Motorola Edge 50 Fusion, Android 16,
+  ADB por Wi-Fi en `192.168.1.239:5555`):
+  - APK debug instalado (`adb install -r`), app arranca (pid 29687) con el
+    **buffer de crash vacío** (`adb logcat -d -b crash` sin trazas).
+  - `ModelSetStore`: un set multiarchivo creado a mano en
+    `files/draw/sets/misets/ponko-set.json` (con un slot **relativo** y otro
+    **absoluto**) se listó como `misets_model.gguf [Multi-archivo] 2,92 GB`
+    (1,46 + 1,46 GB: los dos slots se resolvieron bien). Al seleccionarlo se
+    guardó `selSet=misets` en `shared_prefs/ponko.xml`, y al cargarlo se
+    obtuvo **"Modelo de dibujo listo"** con
+    `Listo: misets_model.gguf · CPU · 8Hilo · sd.cpp`.
+  - Modelo single-file real (`stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf`)
+    cargado también: `Listo: … · CPU · 8Hilo · sd.cpp`.
+  - `LoraStore`: la LoRA instalada se detecta
+    (`Instalado (desactivado): hyper-sd-sd15-1step (256,7 MB)`) y la
+    preferencia `selLora=hyper-sd-sd15-1step.safetensors` quedó escrita.
+  - `TaggerStore`: la tabla `selected_tags.csv` (248 KB) se detecta; sin
+    modelo `.onnx` importado la UI muestra correctamente
+    "Modelo de etiquetado no importado".
+  - Los slots requeridos ausentes se reportan bien
+    ("Faltan archivos requeridos: Modelo de difusión (DiT / UNet)").
 
 ### Refactor — page extraction (incremental monolith reduction)
 
