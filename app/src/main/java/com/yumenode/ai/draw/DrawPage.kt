@@ -2461,6 +2461,16 @@ class DrawPage(
     }
 
     fun release() {
+        // 出图还在跑时不能 free native 句柄：sd.cpp 的 free_sd_ctx 会销毁正在使用的
+        // VAE/UNet，ggml_runner 撞上 GGML_ASSERT(!graph_active_) 直接 abort，
+        // 整个进程 native crash（SIGABRT）。交给 native 侧的延迟释放处理。
+        if (DrawCore.uiBusy) {
+            // 让引擎自己收尾：nativeFree 会登记成 pending，推理线程退出时再真正释放。
+            DrawCore.release()
+            if (sdHandle != 0L) runCatching { SdCppEngine.nativeFree(sdHandle) }
+            sdHandle = 0L
+            return
+        }
         DrawCore.release()   // 顺序不能反：先断开 API 侧的引用，再真正释放 native 句柄
         if (sdHandle != 0L) runCatching { SdCppEngine.nativeFree(sdHandle) }
         sdHandle = 0L

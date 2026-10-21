@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,16 @@ struct SdHandle {
     jobject   pcb = nullptr;    // PreviewCallback（GlobalRef）
     jmethodID pcb_mid = nullptr; // onPreview(III[B)V
     std::atomic<bool> cancelled{false};
+
+    // 生命周期保护：nativeFree 可能在推理线程还在跑的时候被调用（Activity onDestroy、
+    // 换模型、切主题…）。此时不能直接 free_sd_ctx —— 那会销毁正在使用的 VAE/UNet，
+    // ggml_runner 的 runner_end() 会撞上 GGML_ASSERT(!graph_active_) 直接 abort，
+    // 表现为 native crash (SIGABRT)，整进程挂掉。
+    // 做法：推理期间 free 只置标志，等推理结束后再真正释放。
+    std::mutex         busy_lock;        // 保护 busy / free_pending
+    bool               busy = false;     // 是否有推理在飞
+    bool               free_pending = false; // free 请求已登记，等推理结束再执行
+    std::atomic<bool> freed{false};      // 句柄是否已被释放（防止二次 free）
 };
 
 SdHandle* g_active = nullptr;  // 同时只允许一个生成（进度回调是全局的）
@@ -243,6 +254,17 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
     SdHandle* h = reinterpret_cast<SdHandle*>(handle);
     if (h == nullptr || h->ctx == nullptr) return nullptr;
 
+    // 标记「推理在飞」：nativeFree 看到这个标志就不会直接 free_sd_ctx，
+    // 而是等这里收尾后再释放（否则 use-after-free 会让 ggml abort 掉整个进程）。
+    {
+        std::lock_guard<std::mutex> lk(h->busy_lock);
+        if (h->freed.load()) {
+            LOGE("generate: handle already freed");
+            return nullptr;
+        }
+        h->busy = true;
+    }
+
     std::string sPrompt, sNeg, sLora;
     jstr(env, prompt, sPrompt);
     jstr(env, negative, sNeg);
@@ -366,6 +388,22 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
     sd_set_progress_callback(nullptr, nullptr);
     sd_set_preview_callback(nullptr, PREVIEW_NONE, 1, true, false, nullptr);
     g_active = nullptr;
+
+    // 推理收尾：清 busy 标志；若期间有人请求了 free，这里替他完成释放。
+    bool must_free = false;
+    {
+        std::lock_guard<std::mutex> lk(h->busy_lock);
+        h->busy = false;
+        must_free = h->free_pending;
+        h->free_pending = false;
+    }
+    if (must_free) {
+        // 注意：此刻已经没有任何线程在用 h->ctx 了，可以安全释放。
+        if (h->ctx != nullptr) free_sd_ctx(h->ctx);
+        h->ctx = nullptr;
+        delete h;
+        LOGI("ctx freed (deferred)");
+    }
     return result;
 }
 
@@ -373,6 +411,7 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_yumenode_ai_draw_SdCppEngine_nativeCancel(JNIEnv* /*env*/, jobject /*thiz*/, jlong handle) {
     SdHandle* h = reinterpret_cast<SdHandle*>(handle);
     if (h == nullptr) return;
+    if (h->freed.load()) return;   // 句柄已释放（或正在等推理收尾），别碰它
     h->cancelled.store(true);
     if (h->ctx != nullptr) sd_cancel_generation(h->ctx, SD_CANCEL_ALL);
     LOGI("cancel requested");
@@ -382,6 +421,22 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_yumenode_ai_draw_SdCppEngine_nativeFree(JNIEnv* env, jobject /*thiz*/, jlong handle) {
     SdHandle* h = reinterpret_cast<SdHandle*>(handle);
     if (h == nullptr) return;
+    if (h->freed.exchange(true)) return;   // 已经释放过，别二次 free
+
+    bool defer = false;
+    {
+        std::lock_guard<std::mutex> lk(h->busy_lock);
+        if (h->busy) {
+            // 推理还在飞：不能现在 free_sd_ctx（会 use-after-free 崩 ggml）。
+            // 登记成 pending，推理线程退出时自己完成释放。
+            h->free_pending = true;
+            defer = true;
+        }
+    }
+    if (defer) {
+        LOGI("free deferred: generation in flight, will free after it finishes");
+        return;
+    }
     if (h->ctx != nullptr) free_sd_ctx(h->ctx);
     if (h->cb != nullptr) env->DeleteGlobalRef(h->cb);
     if (h->pcb != nullptr) env->DeleteGlobalRef(h->pcb);
