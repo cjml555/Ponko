@@ -90,6 +90,19 @@ class DrawPage(
         private const val REQ_IMAGE = 0x5D02
         private const val REQ_TAGGER_IMAGE = 0x5D03
 
+        /**
+         * TAESD（Tiny AutoEncoder）：蒸馏过的迷你 VAE，替代完整 VAE 做编解码。
+         * En CPU es MUCH más rápido que el VAE completo (un orden de magnitud menos
+         * de cómputo) y usa mucho menos pico de memoria.
+         * El archivo diffusion_pytorch_model.safetensors trae encoder + decoder juntos,
+         * que es lo que espera sd.cpp en el slot taesd (prefijo "tae.").
+         */
+        private const val TAESD_HF_PATH =
+            "madebyollin/taesd/resolve/main/diffusion_pytorch_model.safetensors"
+
+        /** Tamaño mínimo razonable del archivo TAESD (4.9 MB en la práctica) */
+        private const val TAESD_MIN_BYTES = 1_000_000L
+
         /** LCM-LoRA：HuggingFace 官方仓库路径（文件实名为 pytorch_lora_weights.safetensors） */
         private const val LORA_HF_PATH =
             "latent-consistency/lcm-lora-sdv1-5/resolve/main/pytorch_lora_weights.safetensors"
@@ -1636,6 +1649,21 @@ class DrawPage(
         return err
     }
 
+    /**
+     * Descargar TAESD (mini autoencoder). Devuelve null si OK, o el mensaje de error.
+     *
+     * El archivo va a files/draw/taesd/. El usuario tiene que asignarlo al slot
+     * "taesd" del juego de modelos (Modelos/API → Modelo de dibujo → Taesd).
+     */
+    suspend fun downloadTaesd(useMirror: Boolean, onProgress: (Long, Long) -> Unit): String? {
+        val host = if (useMirror) "https://hf-mirror.com" else "https://huggingface.co"
+        val dir = File(File(c.filesDir, DIR_NAME), "taesd").apply { mkdirs() }
+        val dest = File(dir, "taesd.safetensors")
+        if (dest.exists() && dest.length() > TAESD_MIN_BYTES) return null
+        val err = downloadToFile("$host/$TAESD_HF_PATH", dest, TAESD_MIN_BYTES, onProgress)
+        return err
+    }
+
     /** 通用下载：边下边写 .part，完成后改名为目标文件。返回 null = 成功。 */
     private suspend fun downloadToFile(
         url: String,
@@ -1811,6 +1839,29 @@ class DrawPage(
         if (activeSet?.id == s.id) activeSet = null
         if (prefs().getString(KEY_SEL_SET, null) == s.id) prefs().edit().remove(KEY_SEL_SET).apply()
         return ok
+    }
+
+    /**
+     * 把已下载的 TAESD 指到当前模型集的 "taesd" 槽位。
+     *
+     * El archivo vive en files/draw/taesd/ (fuera del set), asi que se guarda
+     * la ruta absoluta — el loader de sets ya distingue entre nombre y ruta
+     * absoluta (File.isAbsolute).
+     *
+     * Devuelve true si se pudo asignar.
+     */
+    fun assignTaesdToActiveSet(): Boolean {
+        val s = activeSetOrSelected() ?: return false
+        val f = taesdFile() ?: return false
+        s.files["taesd"] = f
+        writeSetJson(s)
+        return true
+    }
+
+    /** 路径 del TAESD descargado, o null si no está. */
+    fun taesdFile(): File? {
+        val f = File(File(File(c.filesDir, DIR_NAME), "taesd"), "taesd.safetensors")
+        return if (f.exists() && f.length() > TAESD_MIN_BYTES) f else null
     }
 
     /** 只把槽位从集里摘掉，不删文件（同一个文件可能被多个槽位共用） */

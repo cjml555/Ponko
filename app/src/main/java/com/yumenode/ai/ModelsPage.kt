@@ -439,6 +439,11 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
             ui.actionButton(getString(R.string.s_219)) { host.onPickLoraFile() },
             matchWrap(topMargin = 8)
         )
+        // TAESD: mini autoencoder para decodificar mucho mas rapido en CPU
+        drawCard.addView(
+            ui.actionButton(getString(R.string.s_548)) { host.onPickTaesdSource() },
+            matchWrap(topMargin = 8)
+        )
         drawCard.addView(
             ui.smallButton(getString(R.string.s_051)) { host.onConfirmDeleteLora() },
             matchWrap(topMargin = 10)

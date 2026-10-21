@@ -1189,6 +1189,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             override fun onToggleDrawSlots() = this@MainActivity.toggleDrawSlots()
             override fun onDrawToggleClickRequested() = this@MainActivity.onDrawToggleClick()
             override fun onPickLoraSource() = this@MainActivity.pickLoraSource()
+            override fun onPickTaesdSource() = this@MainActivity.pickTaesdSource()
             override fun onPickLoraFile() = this@MainActivity.pickLoraFile()
             override fun onConfirmDeleteLora() = this@MainActivity.confirmDeleteLora()
             override fun onPickTaggerOnnx() = this@MainActivity.pickTaggerOnnx()
@@ -2405,6 +2406,54 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             }
             .setNegativeButton(getString(R.string.s_066), null)
             .show()
+    }
+
+    /** Fuente para el TAESD: directa o mirror. */
+    private fun pickTaesdSource() {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.s_548))
+            .setItems(arrayOf(getString(R.string.s_028), getString(R.string.s_029))) { _, which ->
+                startTaesdDownload(useMirror = which == 0)
+            }
+            .setNegativeButton(getString(R.string.s_066), null)
+            .show()
+    }
+
+    private fun startTaesdDownload(useMirror: Boolean) {
+        val dpg = drawPage ?: return
+        val src = if (useMirror) "hf-mirror.com" else "huggingface.co"
+        setStatus(getString(R.string.s_549), C_WARN)
+        scope.launch {
+            val err = dpg.downloadTaesd(useMirror) { done, total ->
+                val pct = if (total > 0) ((done * 100) / total).toInt() else -1
+                runOnUiThread {
+                    setStatus(
+                        if (pct >= 0) getString(R.string.v_008, src, pct, UiHelpers.fmtSize(done), UiHelpers.fmtSize(total))
+                        else getString(R.string.v_009, src, UiHelpers.fmtSize(done)),
+                        C_WARN
+                    )
+                }
+            }
+            runOnUiThread {
+                if (err == null) {
+                    // Ofrecer asignarlo al slot "taesd" del set activo de una vez:
+                    // si no, el usuario tiene que buscar el panel de slots a mano.
+                    val assigned = dpg.assignTaesdToActiveSet()
+                    if (assigned) {
+                        toast(getString(R.string.s_552))
+                        setStatus(getString(R.string.s_552), C_OK)
+                        refreshDrawSlots()
+                        drawModelStatus?.text = dpg.modelSummary()
+                    } else {
+                        toast(getString(R.string.s_550))
+                        setStatus(getString(R.string.s_550), C_OK)
+                    }
+                } else {
+                    toast(err)
+                    setStatus(err, C_ERR)
+                }
+            }
+        }
     }
 
     private fun startLoraDownload(useMirror: Boolean) {

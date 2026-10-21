@@ -578,4 +578,9 @@
     <string name="s_545">Decode the image in blocks instead of all at once. Large images need hundreds of MB to decode in one piece; tiling keeps the memory peak tied to the block size instead. Slightly slower, but it lets you generate big images on a phone with little RAM.</string>
     <string name="s_546">Block size (px)</string>
     <string name="s_547">Overlap between blocks (0–0.5). Higher values reduce visible seams but need more memory.</string>
+    <string name="s_548">Download TAESD (fast decoder)</string>
+    <string name="s_549">Downloading TAESD…</string>
+    <string name="s_550">TAESD downloaded. Assign it to the &quot;taesd&quot; slot of your model set, then reload the model: it replaces the full VAE and decodes much faster on CPU.</string>
+    <string name="s_551">TAESD (tiny autoencoder) is a distilled mini VAE. It decodes the latent into pixels far faster than the full VAE, which is what dominates the wait on a phone. The file is about 5 MB. Note: it is only for SD1.x/SD2.x models; SDXL needs TAESDXL, which the app does not download yet.</string>
+    <string name="s_552">TAESD downloaded and assigned to the &quot;taesd&quot; slot. Reload the model to use it: decoding gets much faster on CPU.</string>
 </resources>

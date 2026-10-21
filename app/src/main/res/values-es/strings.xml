@@ -578,4 +578,9 @@
     <string name="s_545">Decodifica la imagen por bloques en vez de toda de una vez. Las imágenes grandes necesitan cientos de MB para decodificar de una sola vez; el tiling mantiene el pico de memoria ligado al tamaño del bloque. Un poco más lento, pero permite generar imágenes grandes en un teléfono con poca RAM.</string>
     <string name="s_546">Tamaño del bloque (px)</string>
     <string name="s_547">Solapamiento entre bloques (0–0.5). Más valor reduce las costuras visibles pero necesita más memoria.</string>
+    <string name="s_548">Descargar TAESD (decodificador rápido)</string>
+    <string name="s_549">Descargando TAESD…</string>
+    <string name="s_550">TAESD descargado. Asígvalo al slot «taesd» de tu conjunto de modelos y vuelve a cargar el modelo: sustituye al VAE completo y decodifica mucho más rápido en CPU.</string>
+    <string name="s_551">TAESD (tiny autoencoder) es un mini VAE destilado. Decodifica el latent a píxeles mucho más rápido que el VAE completo, que es lo que domina la espera en un teléfono. El archivo pesa unos 5 MB. Ojo: solo sirve para modelos SD1.x/SD2.x; SDXL necesita TAESDXL, que la app todavía no descarga.</string>
+    <string name="s_552">TAESD descargado y asignado al slot «taesd». Vuelve a cargar el modelo para usarlo: el decodificado se vuelve mucho más rápido en CPU.</string>
 </resources>

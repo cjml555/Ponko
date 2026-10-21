@@ -70,6 +70,9 @@ interface ModelsHost {
     /** Callback: seleccionar origen de LoRA. */
     fun onPickLoraSource()
 
+    /** Descargar TAESD (mini autoencoder para decodificar mas rapido en CPU). */
+    fun onPickTaesdSource()
+
     /** Callback: seleccionar archivo LoRA. */
     fun onPickLoraFile()
 
