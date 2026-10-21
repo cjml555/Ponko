@@ -8,8 +8,10 @@ env:
 
 on:
   push:
-    branches:
-      - '**'
+    # Todo branch excepto 'beta', que tiene su propio workflow (beta-branch.yml)
+    # para evitar builds duplicados. Las tags de version se ignoran aparte.
+    branches-ignore:
+      - 'beta'
     tags-ignore:
       - 'v*'
       - 'beta*'

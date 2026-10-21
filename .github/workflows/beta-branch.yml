@@ -1,0 +1,64 @@
+name: Beta Branch Build (Push to beta)
+
+# Cada push a la rama `beta` compila el APK y lo sube como artefacto.
+# No crea releases ni tags: la rama beta es el canal de desarrollo continuo.
+# Los releases beta con tag los hace .github/workflows/beta.yml.
+
+permissions:
+  contents: read
+
+env:
+  main_project_module: app
+  playstore_name: ponko
+
+on:
+  push:
+    branches:
+      - 'beta'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set current date
+        run: echo "date_today=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Set repository name
+        run: echo "repository_name=$(echo '${{ github.repository }}' | awk -F '/' '{print $2}')" >> $GITHUB_ENV
+
+      - name: Set Up JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          cache: 'gradle'
+
+      # NDK r29 para el native de stable-diffusion.cpp (libyumenode_sd.so).
+      # Sin esto el build falla en configureCMake.
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1.6.0
+        with:
+          ndk-version: r29
+          link-to-sdk: true
+
+      - name: Run tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build Debug APK (Beta branch)
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK Debug
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: Beta Branch APK - ${{ env.date_today }} - ${{ env.playstore_name }} - ${{ env.repository_name }}
+          path: ${{ env.main_project_module }}/build/outputs/apk/debug/*.apk
+
+      - name: List build outputs
+        run: |
+          ls -la ${{ env.main_project_module }}/build/outputs/apk/debug/ 2>/dev/null || echo "No APK debug files"
