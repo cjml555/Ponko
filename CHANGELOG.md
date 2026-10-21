@@ -6,6 +6,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — unificar los tres handlers de importacion de ficheros de dibujo
+
+- **`DrawFileImporter` + `DrawFileImportHost`**
+  (`app/src/main/java/com/yumenode/ai/DrawFileImporter.kt`)
+  - `handlePickedLora()`, `handlePickedTaggerOnnx()` y `handlePickedTaggerCsv()`
+    eran **el mismo handler copiado tres veces**: identicos salvo por la
+    funcion de importacion, el texto de estado, el texto del toast y el
+    refresco de la UI. Ahora los tres llaman a un unico `DrawFileImporter`.
+  - El importer es **generico en el tipo del fichero** (`DrawFileImporter<T>`)
+    y no depende de `android.net.Uri`: asi se puede probar en JVM sin
+    Robolectric (`Uri.parse` es un stub de `android.jar` y ni se puede
+    construir ni parsear en un test plano).
+  - `DrawFileImportHost` expone **solo** lo que el importer necesita (marcar
+    la app ocupada, mover la barra de progreso, poner textos). No puede tocar
+    el motor, la sesion ni el estado de los modelos — el compilador lo
+    garantiza.
+
+### Added
+
+- **5 tests JVM del importador** (`DrawFileImporterTest.kt`): fijan el **orden**
+  de los pasos (ocupar -> progreso -> importar -> liberar -> resultado), que
+  es lo que un refactor rompe en silencio: si el `setBusy(false)` se ejecuta
+  antes de tiempo la app se queda bloqueada, y si el toast de exito se
+  dispara en el error el usuario ve un mensaje falso. Tambien cubren que el
+  refresco se ejecute siempre, que la URI llegue intacta a la importacion y
+  que los callbacks de etapa y progreso se propaguen.
+  Requiere `kotlinx-coroutines-test` (`runTest` + `advanceUntilIdle`) en el
+  classpath de test.
+
+### Fixed
+
+- **CI: el build ya no muere al pedir el JDK 25** (`gradle/gradle-daemon-jvm.properties`
+  eliminado, plugin `foojay-resolver-convention` quitado de `settings.gradle.kts`).
+  Ese fichero (generado por `updateDaemonJvm` en `c94d492`) fijaba el daemon de
+  Gradle en **JetBrains JDK 25** descargado de `api.foojay.io`. En CI, donde
+  no esta cacheado, la descarga fallaba de forma **intermitente** con
+  `400 Bad Request` en el HEAD, y el build moria antes de compilar:
+  `Unable to download toolchain matching the requirements
+  {languageVersion=25, vendor=JetBrains, ...}`.
+  Los runs afectados fallaban a los ~1 min (abortando) mientras los que
+  pasaban tardaban 4-5 min (descargando el JDK) — el sintoma de un
+  rate-limit de foojay contra los runners de GitHub.
+  El proyecto compila con `sourceCompatibility`/`targetCompatibility` 17 y el
+  CI ya instala el JDK 17 con `setup-java`, asi que el JDK 25 no hacia falta
+  para nada. Verificado simulando el CI con JDK 17 (Temurin 17.0.20.1):
+  `compileDebugKotlin` y `testDebugUnitTest` salen **BUILD SUCCESSFUL**, el
+  daemon arranca con `javaVersion=17` y ya no se pide ningun toolchain.
+
 ### Refactor — catalogo y decision de recarga del tagger
 
 - **`TaggerStore` + `TaggerSession` + `TaggerSelection`**
@@ -132,11 +180,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **99/99** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **104/104** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
   `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `TaggerStoreTest` 8,
   `TaggerSessionTest` 10, `TaggerReadyEquivalenceTest` 2,
-  `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
+  `DrawFileImporterTest` 5, `ThreadRecommendationTest` 3;
+  0 fallos, 0 errores, 0 omitidos)
 - `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73201435 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)

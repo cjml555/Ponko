@@ -114,4 +114,6 @@ dependencies {
     // "Method put in org.json.JSONObject not mocked" y la persistencia de
     // los model sets (JSON) no se puede probar sin esto.
     testImplementation("org.json:json:20240303")
+    // runTest para probar handlers con corrutinas en JVM.
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 }
