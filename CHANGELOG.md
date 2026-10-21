@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — calculo de progreso de descargas a un objeto puro
+
+- **`DownloadProgress`** (`app/src/main/java/com/yumenode/ai/DownloadProgress.kt`)
+  - Tres formulas que vivian incrustadas en el bucle de descarga de
+    `ModelDownloader` salen a un objeto puro y testeable: el **backoff
+    exponencial** entre reintentos (1 s, 2 s, 4 s), el calculo de
+    **velocidad / ETA / fraccion de progreso**, y la decision de **tamanio
+    minimo aceptable** de un fichero descargado.
+  - `INITIAL_RETRY_DELAY_MS` y `MAX_RETRIES` quedan definidos **una sola vez**
+    (en `DownloadProgress`); la copia de `ModelDownloader` se borro.
+
+### Added
+
+- **18 tests JVM del progreso de descargas** (`DownloadProgressTest.kt`): el
+  backoff dobla en cada intento, se deja de reintentar en el maximo o si el
+  usuario cancela, la fraccion de progreso es correcta, la velocidad son
+  bytes por segundo, el ETA son los segundos que faltan, el ETA es null sin
+  velocidad, un tamano total desconocido no da progreso, y el tamano minimo
+  respeta el ratio (97 % no llega, 99 % si).
+
 ### Fixed
 
 - **Verificacion de checksum de las descargas: la deteccion de placeholders
@@ -269,14 +289,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **147/147** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **165/165** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
   `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `TaggerStoreTest` 8,
   `TaggerSessionTest` 10, `TaggerReadyEquivalenceTest` 2,
   `DrawFileImporterTest` 5, `ContextBudgetTest` 12, `UiScaleTest` 12,
-  `DownloadIntegrityTest` 19, `ThreadRecommendationTest` 3;
-  0 fallos, 0 errores, 0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73301231 bytes)
+  `DownloadIntegrityTest` 19, `DownloadProgressTest` 18,
+  `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73304687 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - **Verificación en dispositivo** (Motorola Edge 50 Fusion, Android 16,

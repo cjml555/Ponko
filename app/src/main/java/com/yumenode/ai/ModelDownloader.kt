@@ -25,7 +25,6 @@ object ModelDownloader {
     private const val TAG = "ModelDownloader"
     private const val MODELS_DIR = "models"
     private const val MAX_RETRIES = 3
-    private const val INITIAL_RETRY_DELAY_MS = 1000L
     private const val CHUNK_SIZE = 1024 * 1024 // 1MB buffer
     private const val PROGRESS_THROTTLE_MS = 500L
     private const val MIN_FILE_SIZE_RATIO = 0.8 // 80% del tamaño esperado
@@ -673,8 +672,8 @@ object ModelDownloader {
                 }
 
                 // Reintento con backoff exponencial
-                if (attempt < MAX_RETRIES && !cancelled.get()) {
-                    val delayMs = INITIAL_RETRY_DELAY_MS * (1L shl (attempt - 1)) // 1s, 2s, 4s...
+                if (DownloadProgress.shouldRetry(attempt, MAX_RETRIES, cancelled.get())) {
+                    val delayMs = DownloadProgress.retryDelayMs(attempt) // 1s, 2s, 4s...
                     Log.i(TAG, "Reintentando en ${delayMs}ms...")
                     delay(delayMs)
                 }
@@ -737,17 +736,15 @@ object ModelDownloader {
 
                 val now = System.currentTimeMillis()
                 if (now - lastProgressTime > PROGRESS_THROTTLE_MS && totalSize > 0) {
-                    val elapsedSec = (now - startTime) / 1000.0
-                    val speed = if (elapsedSec > 0) downloaded / elapsedSec else 0.0
-                    val eta = if (speed > 0) ((totalSize - downloaded) / speed).toLong() else null
+                    val snap = DownloadProgress.compute(downloaded, totalSize, now - startTime)
 
                     // Callback en hilo principal
                     onProgress(ProgressInfo(
-                        progress = downloaded.toDouble() / totalSize,
-                        downloadedBytes = downloaded,
-                        totalBytes = totalSize,
-                        speedBytesPerSec = speed,
-                        etaSeconds = eta
+                        progress = snap.progress,
+                        downloadedBytes = snap.downloadedBytes,
+                        totalBytes = snap.totalBytes,
+                        speedBytesPerSec = snap.speedBytesPerSec,
+                        etaSeconds = snap.etaSeconds
                     ))
                     lastProgressTime = now
                     lastProgressBytes = downloaded
@@ -764,7 +761,7 @@ object ModelDownloader {
             }
 
             // Verificar tamaño mínimo
-            if (totalSize > 0 && destFile.length() < totalSize * MIN_FILE_SIZE_RATIO) {
+            if (!DownloadProgress.isSizeAcceptable(destFile.length(), totalSize, MIN_FILE_SIZE_RATIO)) {
                 destFile.delete()
                 return@withContext DownloadResult.Failure(
                     "Descarga incompleta: ${destFile.length()} / $totalSize bytes"
