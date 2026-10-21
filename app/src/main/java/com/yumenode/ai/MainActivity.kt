@@ -1713,12 +1713,6 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
      * 估算 LiteRT 会话的输入 token：系统提示 + 历史 + 本轮要发的内容。
      * 历史里之前发过的文件正文也还留在引擎的上下文里，所以一并算上。
      */
-    private fun estimateConversationTokens(s: ChatSession, extra: String, dropLast: Boolean): Float =
-        chatManager.estimateConversationTokens(
-            session = s, extra = extra, dropLast = dropLast,
-            canDrawFromChat = canDrawFromChat, drawToolPrompt = drawToolPrompt
-        )
-
     /** 判断是不是「上下文塞不下」这类错误（LiteRT Status Code 3 / llama.cpp 的 context 满） */
     internal fun isContextOverflow(e: Throwable): Boolean {
         val m = (e.message ?: "").lowercase()

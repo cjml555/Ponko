@@ -6,6 +6,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — presupuesto de contexto a un objeto puro
+
+- **`ContextBudget`** (`app/src/main/java/com/yumenode/ai/ContextBudget.kt`, 81 lineas)
+  - `fitTokens` estaba **duplicado byte a byte** en `ChatManager` y en
+    `AttachmentHandler`: los dos recortaban el texto por el mismo algoritmo
+    (corte por presupuesto de tokens, y si el corte cae en la segunda mitad
+    se recorta al ultimo salto de linea anterior para no partir una frase).
+    Ahora vive una sola vez, en forma pura, con las dos copias reducidas a
+    delegaciones de una linea.
+  - El calculo del presupuesto de la conversacion (`estimateConversationTokens`)
+    sale de `ChatManager` al mismo objeto; el wrapper de cuatro lineas que
+    `MainActivity` tenia encima tambien desaparece.
+  - Codigo muerto barrido: `AttachmentHandler.estTokens()` dejo de usarse al
+    delegar `fitTokens`, y el wrapper privado de `MainActivity` quedo sin
+    llamadores al apuntar directamente a `ContextBudget`.
+
+### Added
+
+- **12 tests JVM del presupuesto de contexto** (`ContextBudgetTest.kt`): el
+  recorte devuelve el texto intacto si cabe, corta cuando no cabe, corta en un
+  salto de linea cuando el corte cae en la segunda mitad y no parte lineas a
+  medias, y el coste por turno (texto + sobre de 12 tokens) con y sin el
+  ultimo turno, con el prompt de dibujo y con el texto de un fichero adjunto.
+  Al fijarlos aparecio un detalle que no era evidente leyendo el codigo: el
+  mensaje actual lleva **su propio** sobre de 12 tokens ademas del sobre de
+  cada turno, de modo que una conversacion vacia con un mensaje corto ya
+  cuesta 13,2 tokens y no 1,2.
+
 ### Refactor — unificar los tres handlers de importacion de ficheros de dibujo
 
 - **`DrawFileImporter` + `DrawFileImportHost`**
@@ -180,13 +208,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **104/104** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **116/116** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
   `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `TaggerStoreTest` 8,
   `TaggerSessionTest` 10, `TaggerReadyEquivalenceTest` 2,
-  `DrawFileImporterTest` 5, `ThreadRecommendationTest` 3;
-  0 fallos, 0 errores, 0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73201435 bytes)
+  `DrawFileImporterTest` 5, `ContextBudgetTest` 12,
+  `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73299399 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - **Verificación en dispositivo** (Motorola Edge 50 Fusion, Android 16,
@@ -210,6 +238,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     "Modelo de etiquetado no importado".
   - Los slots requeridos ausentes se reportan bien
     ("Faltan archivos requeridos: Modelo de difusión (DiT / UNet)").
+- **Importación de una LoRA** (ejercita el `DrawFileImporter` unificado):
+  importar `mi_lora_prueba.safetensors` desde Descargas deja el estado
+  "LoRA importado", el fichero en `files/draw/lora/` y la LoRA listada en la
+  UI ("Instalado (desactivado): mi_lora_prueba"). Sin crash. El fichero de
+  prueba se borro despues.
+- **Envío de un mensaje de chat** (ejercita el presupuesto de contexto):
+  el mensaje sale en el hilo, la app sigue viva y el buffer de crash queda
+  vacio.
 
 ### Refactor — page extraction (incremental monolith reduction)
 
