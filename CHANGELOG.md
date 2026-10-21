@@ -6,6 +6,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Verificacion de checksum de las descargas: la deteccion de placeholders
+  era fragil** (`DownloadIntegrity.kt`).
+  `ModelDownloader.verifyChecksum()` identificaba los checksums de ejemplo
+  del catalogo (`"a1b2c3d4e5f6..."`) comparando solo los **4 primeros
+  hexagrafos**. Un SHA-256 real que empezara por `a1b2` (o por cualquiera de
+  los 11 prefijos) se aceptaba **sin verificar nada**: la comprobacion se
+  saltaba entera y el fichero se daba por bueno.
+  Ahora un placeholder se reconoce por su **forma completa** (4 grupos de 4
+  hex separados por puntos y acabando en `...`), no por un prefijo. Un hash
+  real no puede confundirse con un placeholder, y la verificacion se
+  mantiene activa en cuanto haya checksums de verdad.
+  El hash SHA-256 y el calculo de "descarga incompleta" salen tambien a un
+  objeto puro (`DownloadIntegrity`), con la logica antes mezclada en el
+  descargador.
+
+### Added
+
+- **19 tests JVM de la integridad de descargas** (`DownloadIntegrityTest.kt`):
+  los 9 placeholders del catalogo se detectan; un SHA-256 real **no** se
+  confunde con un placeholder (este es el caso del bug corregido); un
+  placeholder truncado si se intenta verificar; el hash de un contenido
+  conocido (`"abc"`) es el correcto; la comparacion ignora mayusculas; un
+  checksum equivocado se rechaza; y el calculo de descarga incompleta
+  respeta el ratio del 90 % y trata como completo lo que no esta en el
+  catalogo.
+
 ### Refactor — unificar los LayoutParams de la UI
 
 - **`UiExt.matchWrap()` / `UiExt.wrapWrap()`** como fuente unica.
@@ -241,13 +269,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **128/128** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **147/147** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
   `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `TaggerStoreTest` 8,
   `TaggerSessionTest` 10, `TaggerReadyEquivalenceTest` 2,
   `DrawFileImporterTest` 5, `ContextBudgetTest` 12, `UiScaleTest` 12,
-  `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73300631 bytes)
+  `DownloadIntegrityTest` 19, `ThreadRecommendationTest` 3;
+  0 fallos, 0 errores, 0 omitidos)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73301231 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - **Verificación en dispositivo** (Motorola Edge 50 Fusion, Android 16,
