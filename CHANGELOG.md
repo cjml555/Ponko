@@ -6,6 +6,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — extracción del store de model sets de dibujo
+
+- **`ModelSetStore` + `ModelSet` a nivel de archivo** (`app/src/main/java/com/yumenode/ai/draw/ModelSetStore.kt`, 249 líneas)
+  - La persistencia de los model sets (JSON `ponko-set.json` por set, ficheros
+    sueltos legacy, selección, borrado, TAESD global) sale de `DrawPage` y pasa
+    a un store sin dependencias de UI: `DrawPage` baja de 3,564 a 3,474 líneas.
+  - `ModelSet` deja de ser una clase anidada de `DrawPage` y pasa a clase de
+    nivel de archivo; `MainActivity` importa `com.yumenode.ai.draw.ModelSet`
+    (antes `DrawPage.ModelSet`).
+  - `DrawPage` mantiene su API pública (`listSets()`, `selectSet()`,
+    `deleteSet()`, `clearSlot()`, `taesdFile()`, `activeTaesdPath()`,
+    `assignTaesdToActiveSet()`) delegando en el store: los call sites de
+    `MainActivity` y `TaggerUi` no cambian.
+  - Fuente única de verdad: `KIND_SINGLE`/`KIND_MULTI`, `KEY_SEL_SET`,
+    `KEY_TAESD_PATH` y `TAESD_MIN_BYTES` viven ahora en `ModelSetStore`;
+    `DrawPage` los referencia (sus constantes privadas `KEY_SEL_SET` y
+    `KEY_TAESD_PATH`, ya sin uso, se borraron).
+
+### Added
+
+- **21 tests JVM para el store** (`ModelSetStoreTest.kt`, 272 líneas;
+  `FakePrefs.kt`, 89 líneas) — la lógica de disco y JSON de los model sets
+  no tenía ninguna cobertura antes:
+  - `safeId`: caracteres seguros, sustitución, recorte de `_`, fallback `"set"`,
+    tope de 48 caracteres.
+  - `listSets`: `.gguf` suelto → set legacy, el VAE suelto se cuelga del set
+    en lugar de listarse aparte, los ficheros ocultos se ignoran.
+  - Round-trip del JSON: nombre/kind/family, ficheros **dentro** del set por
+    nombre y ficheros **fuera** por ruta absoluta, slots cuyo fichero ya no
+    existe se descartan al leer, JSON corrupto se ignora.
+  - Selección, borrado (con y sin directorio), `clearSlot` (quita el slot pero
+    **no** borra el fichero) y TAESD (ruta, fichero ausente, fichero truncado).
+- **`org.json` real en el classpath de test** (`app/build.gradle.kts`):
+  `testImplementation("org.json:json:20240303")`. El `org.json` de `android.jar`
+  es un stub que lanza `Method put in org.json.JSONObject not mocked`, así que
+  sin esto la persistencia en JSON no se puede probar. **Solo afecta al
+  classpath de test**: `debugRuntimeClasspath` no lo incluye y el APK no lo
+  lleva.
+
+### Verified
+
+- `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
+- `./gradlew :app:testDebugUnitTest` → **45/45** tests pasan
+  (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
+  `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73,190,003 bytes)
+- `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
+  ni de comportamiento respecto a antes del refactor)
+- Verificación en dispositivo: **pendiente** — no había ningún dispositivo
+  accesible por ADB (`adb devices` vacío; barrido de `192.168.1.0/24:5555` sin
+  resultados), así que el gate de UI en hardware queda sin ejecutar.
+
 ### Refactor — page extraction (incremental monolith reduction)
 
 - **ModelsPage extracted** (`fcd86be`)

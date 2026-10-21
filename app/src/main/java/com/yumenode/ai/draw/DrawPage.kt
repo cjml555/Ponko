@@ -100,8 +100,8 @@ class DrawPage(
         private const val TAESD_HF_PATH =
             "madebyollin/taesd/resolve/main/diffusion_pytorch_model.safetensors"
 
-        /** Tamaño mínimo razonable del archivo TAESD (4.9 MB en la práctica) */
-        private const val TAESD_MIN_BYTES = 1_000_000L
+        /** Tamaño mínimo razonable del archivo TAESD (fuente única: [ModelSetStore]) */
+        private const val TAESD_MIN_BYTES = ModelSetStore.TAESD_MIN_BYTES
 
         /** LCM-LoRA：HuggingFace 官方仓库路径（文件实名为 pytorch_lora_weights.safetensors） */
         private const val LORA_HF_PATH =
@@ -110,12 +110,9 @@ class DrawPage(
         /** 下载后重命名成这个，prompt 里就用 `lora:lcm-lora-sdv1-5:1` 引用 */
         const val LORA_NAME = "lcm-lora-sdv1-5"
 
-        /** 模型集偏好键（当前选中的模型集 id） */
-        private const val KEY_SEL_SET = "selSet"
-
-        /** 单文件 / 多文件 */
-        const val KIND_SINGLE = "single"
-        const val KIND_MULTI = "multi"
+        /** 单文件 / 多文件（fuente única: [ModelSetStore]) */
+        const val KIND_SINGLE = ModelSetStore.KIND_SINGLE
+        const val KIND_MULTI = ModelSetStore.KIND_MULTI
 
         /** 家族 id */
         const val FAM_SD15 = "sd15"
@@ -213,8 +210,6 @@ class DrawPage(
         private const val KEY_VAE_TILE_SIZE = "vaeTileSize"
         /** VAE tiling 的块重叠（0–0.5） */
         private const val KEY_VAE_TILE_OVERLAP = "vaeTileOverlap"
-        /** TAESD activo（ruta absoluta del fichero）， global a todos los modelos */
-        private const val KEY_TAESD_PATH = "taesdPath"
         private const val KEY_SAMPLER = "drawSampler"
         private const val KEY_SCHEDULER = "drawScheduler"
 
@@ -244,6 +239,12 @@ class DrawPage(
 
     /** 当前模型集（单文件 = 只填主模型；多文件 = 主模型 + 各槽位配套文件） */
     private var activeSet: ModelSet? = null
+
+    /**
+     * Persistencia de los model sets (JSON en files/draw/sets + ficheros sueltos).
+     * Extraido de esta clase para que la logica de disco quede testeable en JVM.
+     */
+    private val setStore: ModelSetStore = ModelSetStore(c.filesDir, prefs())
     /** 下一个要导入的类型（由「模型」页的类型菜单设定） */
     var pendingKind: String = KIND_SINGLE
     var pendingFamily: String = FAM_SD15
@@ -1722,100 +1723,15 @@ class DrawPage(
 
     // ================= 模型集（单文件 / 多文件；由「模型」页驱动） =================
 
-    /** 一个模型集：单文件 = 只填 model 槽位；多文件 = 主模型 + 各槽位配套文件。 */
-    class ModelSet(
-        val id: String,
-        var name: String,
-        var kind: String,
-        var family: String,
-        val dir: File?,
-        val files: MutableMap<String, File> = LinkedHashMap(),
-    ) {
-        /** 主模型文件。末尾那个兜底要跳过 taesd —— 它是可选附件，
-         *  万一某个集只有 taesd，也不该把它当成主模型。 */
-        fun mainFile(): File? = files["model"] ?: files["diffusion"]
-            ?: files.entries.firstOrNull { it.key != "taesd" }?.value
-        fun sizeBytes(): Long = files.values.sumOf { it.length() }
-        fun slotCount(): Int = files.size
-    }
-
-    private fun setsDir(): File = File(File(c.filesDir, DIR_NAME), "sets").apply { mkdirs() }
-
-    private fun safeId(s: String): String {
-        val t = s.replace(Regex("[^A-Za-z0-9._-]"), "_").trim('_').take(48)
-        return t.ifEmpty { "set" }
-    }
-
-    private fun newSetId(base: String): String {
-        val b = safeId(base)
-        var id = b
-        var i = 2
-        while (File(setsDir(), id).exists()) { id = "$b-$i"; i++ }
-        return id
-    }
-
-    private fun writeSetJson(s: ModelSet) {
-        val d = s.dir ?: return
-        runCatching {
-            val o = org.json.JSONObject()
-            o.put("name", s.name)
-            o.put("kind", s.kind)
-            o.put("family", s.family)
-            val a = org.json.JSONObject()
-            // 集目录里的文件只存文件名；集外的文件（旧版散落模型提升成集时会引用到）存绝对路径，
-            // 否则读回来会按集目录去拼、拼不到。两种情况靠 File.isAbsolute 区分。
-            s.files.forEach { (k, f) ->
-                val inSet = f.parentFile?.absoluteFile == d.absoluteFile
-                a.put(k, if (inSet) f.name else f.absolutePath)
-            }
-            o.put("slots", a)
-            File(d, "ponko-set.json").writeText(o.toString())
-        }
-    }
-
-    private fun readSetJson(dir: File): ModelSet? {
-        val o = runCatching { org.json.JSONObject(File(dir, "ponko-set.json").readText()) }.getOrNull() ?: return null
-        val files = LinkedHashMap<String, File>()
-        o.optJSONObject("slots")?.let { a ->
-            val keys = a.keys()
-            while (keys.hasNext()) {
-                val k = keys.next()
-                val fn = a.optString(k, "")
-                val stored = File(fn)
-                val f = if (stored.isAbsolute) stored else File(dir, fn)
-                if (fn.isNotEmpty() && f.isFile) files[k] = f
-            }
-        }
-        return ModelSet(dir.name, o.optString("name", dir.name),
-            o.optString("kind", KIND_MULTI), o.optString("family", "custom"), dir, files)
-    }
-
     /** 私有目录里已有的绘图模型：新式模型集（draw/sets 下的子目录）+ 旧版散落的单文件 gguf */
-    fun listSets(): List<ModelSet> {
-        val out = ArrayList<ModelSet>()
-        setsDir().listFiles { f -> f.isDirectory }?.sortedByDescending { it.lastModified() }?.forEach { d ->
-            readSetJson(d)?.let { out.add(it) }
-        }
-        val loose = File(c.filesDir, DIR_NAME).listFiles { f ->
-            f.isFile && f.name.endsWith(".gguf", true) && !f.name.startsWith(".")
-        }?.sortedByDescending { it.lastModified() } ?: emptyList()
-        val looseVae = loose.firstOrNull { it.name.contains("vae", true) }
-        for (f in loose) {
-            if (f === looseVae) continue
-            val files = LinkedHashMap<String, File>()
-            files["model"] = f
-            if (looseVae != null) files["vae"] = looseVae
-            out.add(ModelSet("legacy:${f.name}", f.nameWithoutExtension, KIND_SINGLE, "other", null, files))
-        }
-        return out
-    }
+    fun listSets(): List<ModelSet> = setStore.listSets()
 
     /** 启动后兜底：把上次选中的模型集（或第一个）设为当前 */
     fun ensureActiveSet() {
         if (activeSet != null) return
         val all = listSets()
         if (all.isEmpty()) return
-        val saved = prefs().getString(KEY_SEL_SET, null)
+        val saved = setStore.selectedSetId()
         val pick = all.firstOrNull { it.id == saved } ?: all.first()
         selectSet(pick)
     }
@@ -1832,14 +1748,12 @@ class DrawPage(
         activeSet = s
         mainModel = s.mainFile()
         vaeModel = s.files["vae"]
-        prefs().edit().putString(KEY_SEL_SET, s.id).apply()
+        setStore.selectSet(s)
     }
 
     fun deleteSet(s: ModelSet): Boolean {
-        val ok = if (s.dir != null) runCatching { s.dir.deleteRecursively() }.getOrDefault(false)
-        else s.files.values.all { runCatching { it.delete() }.getOrDefault(false) }
+        val ok = setStore.deleteSet(s)
         if (activeSet?.id == s.id) activeSet = null
-        if (prefs().getString(KEY_SEL_SET, null) == s.id) prefs().edit().remove(KEY_SEL_SET).apply()
         return ok
     }
 
@@ -1857,19 +1771,19 @@ class DrawPage(
         // La ruta se guarda como preferencia global (no en el set): los sets "legacy"
         // (archivos sueltos) no tienen directorio donde escribir el JSON, y el
         // TAESD sirve igual para cualquier modelo SD1.x/SD2.x.
-        prefs().edit().putString(KEY_TAESD_PATH, f.absolutePath).apply()
+        setStore.setTaesdPath(f.absolutePath)
         // Y ademas se apunta en el set activo, si es uno con directorio (multi-archivo).
         val s = activeSetOrSelected()
         if (s != null && s.dir != null) {
             s.files["taesd"] = f
-            writeSetJson(s)
+            setStore.writeSetJson(s)
         }
         return true
     }
 
     /** Ruta del TAESD activa (preferencia global) o null. */
     fun activeTaesdPath(): String? {
-        val pref = prefs().getString(KEY_TAESD_PATH, null)
+        val pref = setStore.taesdPath()
         if (!pref.isNullOrBlank() && File(pref).exists()) return pref
         // El set activo puede tener su propio taesd (multi-archivo).
         val s = activeSetOrSelected()
@@ -1879,16 +1793,12 @@ class DrawPage(
     }
 
     /** 路径 del TAESD descargado, o null si no está. */
-    fun taesdFile(): File? {
-        val f = File(File(File(c.filesDir, DIR_NAME), "taesd"), "taesd.safetensors")
-        return if (f.exists() && f.length() > TAESD_MIN_BYTES) f else null
-    }
+    fun taesdFile(): File? = setStore.taesdFile()
 
     /** 只把槽位从集里摘掉，不删文件（同一个文件可能被多个槽位共用） */
     fun clearSlot(key: String) {
         val s = activeSetOrSelected() ?: return
-        s.files.remove(key)
-        writeSetJson(s)
+        setStore.clearSlot(s, key)
     }
 
     /** 模型集摘要：名字 · 单/多文件 · 家族 · 文件数 · 体积 */
@@ -1928,8 +1838,8 @@ class DrawPage(
             val cur = activeSet
             val useSet: ModelSet = when {
                 pendingNewSet || cur == null -> {
-                    val id = newSetId(name.substringBeforeLast('.'))
-                    val dir = File(setsDir(), id).apply { mkdirs() }
+                    val dir = setStore.createSetDir(name.substringBeforeLast('.'))
+                    val id = dir.name
                     ModelSet(id, id, pendingKind, pendingFamily, dir).also {
                         activeSet = it
                         pendingNewSet = false
@@ -1938,7 +1848,7 @@ class DrawPage(
                 cur.dir == null -> {
                     // 旧版散落单文件（不是模型集）：要补配套文件就得先提升成模型集。
                     // 主模型动辄几 GB，**不复制、不搬动**——沿用原文件，写 json 时记绝对路径引用。
-                    val dir = File(setsDir(), newSetId(cur.name)).apply { mkdirs() }
+                    val dir = setStore.createSetDir(cur.name)
                     ModelSet(dir.name, cur.name, cur.kind, cur.family, dir, LinkedHashMap(cur.files)).also {
                         activeSet = it
                     }
@@ -1983,7 +1893,7 @@ class DrawPage(
                 }
             }
             useSet.files[key] = dest
-            writeSetJson(useSet)
+            setStore.writeSetJson(useSet)
             selectSet(useSet)
             withContext(Dispatchers.Main) {
                 statusText.text = c.getString(R.string.s_161)

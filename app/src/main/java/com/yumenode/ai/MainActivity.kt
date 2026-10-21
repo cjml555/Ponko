@@ -53,6 +53,7 @@ import com.google.ai.edge.litertlm.ModelInfo
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.yumenode.ai.draw.DrawPage
+import com.yumenode.ai.draw.ModelSet
 import com.yumenode.ai.draw.GgufProbe
 import com.yumenode.ai.draw.TaggerEngine
 import com.google.ai.edge.litertlm.Conversation
@@ -2363,7 +2364,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     }
 
     /** 点击某个模型集 → 只标记为选用，不加载（与对话模型一致，需再点「加载绘图模型」）。 */
-    private fun selectDrawSet(s: DrawPage.ModelSet) {
+    private fun selectDrawSet(s: ModelSet) {
         drawPage?.selectSet(s)
         drawSetId = s.id
         drawModelStatus?.text = drawPage?.modelSummary()
@@ -2509,7 +2510,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     }
 
     /** 长按删除一个模型集（连同它的全部文件）。 */
-    private fun confirmDeleteDrawSet(s: DrawPage.ModelSet) {
+    private fun confirmDeleteDrawSet(s: ModelSet) {
         val dpg = drawPage ?: return
         if (dpg.isReady() && dpg.activeSetId() == s.id) {
             toast(getString(R.string.s_172))

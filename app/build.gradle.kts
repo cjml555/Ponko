@@ -110,4 +110,8 @@ dependencies {
     testImplementation("androidx.test.ext:junit:1.1.5")
     testImplementation("androidx.test:runner:1.6.1")
     testImplementation("org.robolectric:robolectric:4.13")
+    // org.json real para los tests JVM: el stub de android.jar lanza
+    // "Method put in org.json.JSONObject not mocked" y la persistencia de
+    // los model sets (JSON) no se puede probar sin esto.
+    testImplementation("org.json:json:20240303")
 }
