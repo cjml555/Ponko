@@ -6,6 +6,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — el contrato de la API local a un objeto puro
+
+- **`OpenAiApi`** (`app/src/main/java/com/yumenode/ai/OpenAiApi.kt`)
+  - La **superficie publica** de la app (lo que ven Hermes, OpenWebUI,
+    Continue o cualquier otro cliente) sale de `ApiServer` a un objeto puro:
+    el parseo de mensajes, el aplanado del contenido multimodal, los
+    parametros de sampling, las respuestas `chat.completion` y
+    `chat.completion.chunk`, el formato SSE y los cuerpos de error.
+  - Los **5 cuerpos de error** escritos a mano y el helper `errJson()` (con
+    sus 8 call sites) se unifican en `OpenAiApi.error()`: el JSON es
+    **identico** (misma clave, mismo orden), pero ahora hay un unico sitio
+    donde cambiarlo.
+  - `ApiServer` baja de 511 a 457 lineas.
+  - Los tipos de error tienen nombre: `OpenAiApi.ErrorType.INVALID_REQUEST`,
+    `RATE_LIMIT`, `SERVER`, `SERVICE_UNAVAILABLE`.
+
+### Added
+
+- **28 tests JVM del contrato OpenAI** (`OpenAiApiTest.kt`): el contenido string
+  se conserva, el array de partes concatena los textos y convierte las
+  imagenes en `[image]`, los tipos de parte desconocidos se ignoran, el rol
+  por defecto es `user`, una peticion solo de sistema no se sirve,
+  `max_tokens` tiene prioridad sobre `max_completion_tokens`, la forma de
+  `chat.completion` y de `chat.completion.chunk` es la de OpenAI, el primer
+  chunk lleva el rol y los demas no, el evento SSE es `data: <json>` + linea
+  en blanco, el marcador de fin es `data: [DONE]` y los cuatro tipos de
+  error son los de OpenAI.
+
 ### Refactor — calculo de progreso de descargas a un objeto puro
 
 - **`DownloadProgress`** (`app/src/main/java/com/yumenode/ai/DownloadProgress.kt`)
@@ -289,14 +317,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **165/165** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **193/193** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
   `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `TaggerStoreTest` 8,
   `TaggerSessionTest` 10, `TaggerReadyEquivalenceTest` 2,
   `DrawFileImporterTest` 5, `ContextBudgetTest` 12, `UiScaleTest` 12,
-  `DownloadIntegrityTest` 19, `DownloadProgressTest` 18,
+  `DownloadIntegrityTest` 19, `DownloadProgressTest` 18, `OpenAiApiTest` 28,
   `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73304687 bytes)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73310231 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - **Verificación en dispositivo** (Motorola Edge 50 Fusion, Android 16,
@@ -337,6 +365,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   API (que usa `ApiBlockBuilder`) sale tambien sin deformaciones: campo de
   puerto, botones «Nueva clave» / «Borrar» alineados y «Iniciar servicio» a
   ancho completo.
+- **API local probada contra el dispositivo real** (servidor en
+  `http://192.168.1.239:8080`, modelo `llama-3.2-1b-instruct-q4_k_m.gguf`
+  cargado):
+  - `GET /health` → `{"status":"ok","role":"chat","model":"llama-3.2-1b-...","ready":true,"busy":false}`
+  - `GET /v1/models` → `{"object":"list","data":[{"id":"llama-3.2-1b-...","object":"model","created":...,"owned_by":"ponko"}]}`
+  - `POST /v1/chat/completions` sin `stream` → respuesta `chat.completion` con
+    `choices[0].message` y bloque `usage` (`prompt_tokens` /
+    `completion_tokens` / `total_tokens`).
+  - Con `stream: true` → primer chunk con `delta.role = "assistant"`, chunks
+    siguientes con solo `delta.content` y `finish_reason: null`, chunk final
+    con `delta: {}` y `finish_reason: "stop"`, y cierre con `data: [DONE]`.
+  - Contenido multimodal (`content` como array de partes): la parte de texto
+    se concatena y la de imagen llega al modelo como `[image]`.
+  - Los cuatro tipos de error responden con el formato de OpenAI:
+    JSON invalido → `400 invalid_request_error`; peticion sin mensaje de
+    usuario → `400 invalid_request_error`; sin modelo cargado →
+    `503 service_unavailable`; ruta inexistente → `404 invalid_request_error`.
 
 ### Refactor — page extraction (incremental monolith reduction)
 
