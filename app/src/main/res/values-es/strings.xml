@@ -197,6 +197,14 @@
 <string name="s_201">+ Nuevo chat</string>
 <string name="s_202">🎨 Generando imagen…</string>
 <string name="s_203">🖼️ Resultado</string>
+<string name="s_529">Intensidad de ampliación</string>
+<string name="s_530">%1$s</string>
+<string name="s_531">Menor = más cerca del original (0.05–0.99). 0.35 es un buen punto de partida: misma composición, más detalle.</string>
+<string name="s_524">Ampliar (2×)</string>
+<string name="s_525">Ampliando…</string>
+<string name="s_526">Ampliado: %1$d×%2$d</string>
+<string name="s_527">Fallo al ampliar: %1$s</string>
+<string name="s_528">Ampliar vuelve a dibujar la imagen actual al doble de resolución con baja intensidad de ruido, así que la composición se mantiene y mejora el detalle.</string>
 <string name="s_204">🤔 Cambiado a modo pensamiento (sesión reconstruida, historial conservado)</string>
 <string name="s_205">🤔 Razonamiento (toca para expandir)</string>
 <string name="s_206">🤔 Razonamiento (toca para contraer)</string>
@@ -554,4 +562,16 @@
 
     <string name="s_522">LoRA</string>
     <string name="s_523">Modelo destilado: %1$d pasos · CFG 1</string>
+    <string name="s_532">Preset de tamaño</string>
+    <string name="s_533">Personalizado</string>
+    <string name="s_534">Tamaño personalizado (px)</string>
+    <string name="s_535">El ancho y el alto deben ser múltiplos de 64 (se redondean hacia abajo automáticamente). 512x512 es la resolución nativa de SD1.5; 256 es mucho más rápido y va bien para una primera prueba.</string>
+    <string name="s_536">Cancelar generación</string>
+    <string name="s_537">Cancela la generación en curso. Surte efecto tras terminar el paso actual.</string>
+    <string name="s_538">Redibujar (img2img)</string>
+    <string name="s_539">Hi-res nativo</string>
+    <string name="s_540">Método de ampliación</string>
+    <string name="s_541">Redibujar usa la imagen como referencia img2img: vuelve a consumir el prompt y la composición puede moverse. El hi-res nativo se ejecuta dentro de stable-diffusion.cpp: amplía el latent y hace una segunda pasada de denoise, así que la composición se queda fija y no se gastan tokens extra del prompt.</string>
+    <string name="s_542">Ampliador</string>
+    <string name="s_543">La ampliación en espacio latent es la más barata. Lanczos decifica a píxeles primero (nítido, pero lento).</string>
 </resources>

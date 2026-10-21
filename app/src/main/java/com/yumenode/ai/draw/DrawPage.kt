@@ -17,6 +17,7 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -29,6 +30,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Toast
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
@@ -38,6 +40,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.roundToInt
 
 /** 用户主动中断生成时抛出（与真正的失败区分开）。消息不面向用户，用固定英文。 */
 class GenerationCancelledException : RuntimeException("Generation cancelled")
@@ -81,6 +84,9 @@ class DrawPage(
         const val DIR_NAME = "draw"
         /** 打标模型/标签表目录：filesDir/tagger */
         const val TAGGER_DIR = "tagger"
+
+        /** 尺寸预设（方形，px）。sd.cpp 要求 64 的倍数，这里全是对齐的。 */
+        private val SIZE_PRESETS = listOf(64, 128, 256, 384, 512)
         private const val REQ_IMAGE = 0x5D02
         private const val REQ_TAGGER_IMAGE = 0x5D03
 
@@ -183,6 +189,11 @@ class DrawPage(
         private const val KEY_CFG = "drawCfg"
         private const val KEY_SEED = "drawSeed"
         private const val KEY_LORA_SCALE = "drawLoraScale"
+        private const val KEY_UPSCALE_STRENGTH = "upscaleStrength"
+        /** 放大方式：0 = 图生图重绘，1 = sd.cpp 原生 hires fix */
+        private const val KEY_UPSCALE_MODE = "upscaleMode"
+        /** 原生 hires fix 的放大器索引 */
+        private const val KEY_UPSCALE_UPSCALER = "upscaleUpscaler"
         private const val KEY_SAMPLER = "drawSampler"
         private const val KEY_SCHEDULER = "drawScheduler"
 
@@ -305,6 +316,14 @@ class DrawPage(
     // 宽 / 高（可自由填，sd.cpp 要求 64 的倍数）
     private lateinit var widthEdit: EditText
     private lateinit var heightEdit: EditText
+    /** 预设尺寸按钮组：点一下就把 width/height 两个输入框填成对应值 */
+    private val sizePresetButtons = mutableListOf<android.widget.Button>()
+    /** 当前选中的预设尺寸（0 = 自定义）；null 表示尺寸跟预设不一致 */
+    private var selectedSizePreset: Int? = null
+    /** 自定义尺寸行：只有选「Personalizado」时才显示 */
+    private var customSizeRow: View? = null
+    /** 程序化改宽高时置 true，免得 watcher 把预设高亮清掉 */
+    private var suppressPresetSync = false
 
     // 采样器 / 调度器（第 0 项 = 自动）
     private lateinit var samplerSpinner: android.widget.Spinner
@@ -323,7 +342,20 @@ class DrawPage(
     // 结果面板
     private lateinit var resultImg: ImageView
     private lateinit var resultInfo: TextView
+    /** 取消按钮（pestaña Resultado）：只在出图中显示，平时隐藏 */
+    private lateinit var resultCancelBtn: Button
+    /** 放大进度条（pestaña Resultado）：只在放大中显示 */
+    private lateinit var upscaleProgressBar: ProgressBar
+    /** 放大进度文字（pestaña Resultado） */
+    private lateinit var upscaleProgressText: TextView
+    /** 放大方式：0 = 图生图重绘，1 = sd.cpp 原生 hires fix */
+    private lateinit var upscaleModeSpinner: android.widget.Spinner
+    /** 原生 hires fix 用的放大器 */
+    private lateinit var upscaleUpscalerSpinner: android.widget.Spinner
     private lateinit var saveBtn: Button
+    private lateinit var upscaleBtn: Button
+    private lateinit var upscaleStrengthBar: SeekBar
+    private lateinit var upscaleStrengthText: TextView
     private lateinit var historyRow: LinearLayout
     private lateinit var histEmpty: TextView
 
@@ -513,11 +545,10 @@ class DrawPage(
         val paramCard = card()
         paramCard.addView(title(c.getString(R.string.s_065)))
 
-        // 尺寸：宽 × 高，自由填（sd.cpp 要求 64 的倍数）——从上次的值恢复
+        // 尺寸：预设按钮组（64→512 + Personalizado），选预设直接填宽高
         widthEdit = smallNumber(loadParam(KEY_W, defOf("t2i", "w", "512")))
         heightEdit = smallNumber(loadParam(KEY_H, defOf("t2i", "h", "512")))
-        paramCard.addView(whRow(c.getString(R.string.s_070),
-            c.getString(R.string.s_068), widthEdit, heightEdit))
+        paramCard.addView(sizePresetRow())
 
         // 采样器 / 调度器
         samplerSpinner = choiceSpinner(
@@ -663,6 +694,28 @@ class DrawPage(
             text = c.getString(R.string.s_184)
         }
         resultCard.addView(resultInfo)
+
+        // 取消生成：出图中才出现（平时隐藏），点一下打断 native 推理
+        resultCancelBtn = Button(c).apply {
+            text = c.getString(R.string.s_536)
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(pal.stop)
+            typeface = Typeface.DEFAULT_BOLD
+            visibility = View.GONE
+            setOnClickListener {
+                doCancel()
+                c.toast(c.getString(R.string.s_125), short = true)
+            }
+        }
+        resultCard.addView(resultCancelBtn, c.matchWrap(top = 8))
+        resultCard.addView(TextView(c).apply {
+            text = c.getString(R.string.s_537)
+            textSize = 10.5f
+            setTextColor(subText)
+            setPadding(0, c.dp(3), 0, 0)
+        })
+
         saveBtn = Button(c).apply {
             text = c.getString(R.string.s_045)
             setBackgroundColor(primary)
@@ -673,6 +726,95 @@ class DrawPage(
                 if (b == null) c.toast(c.getString(R.string.s_183), short = true) else onSaveImage?.invoke(b, saveName())
             }
         }
+
+        // 放大（2×）：用「图生图」通道把这张图当参考图重绘，构图不变、细节更细
+        upscaleBtn = Button(c).apply {
+            text = c.getString(R.string.s_524)
+            textSize = 13f
+            setTextColor(primary)
+            setBackgroundColor(pal.primarySoft)
+            typeface = Typeface.DEFAULT_BOLD
+            setOnClickListener { upscaleLast() }
+        }
+        resultCard.addView(upscaleBtn, c.matchWrap(top = 10))
+
+        // 放大进度：条 + 文字（只在放大过程中显示）
+        upscaleProgressText = TextView(c).apply {
+            textSize = 11.5f
+            setTextColor(subText)
+            visibility = View.GONE
+            setPadding(0, c.dp(6), 0, 0)
+        }
+        resultCard.addView(upscaleProgressText, c.matchWrap(top = 8))
+        upscaleProgressBar = ProgressBar(c, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            visibility = View.GONE
+            progressTintList = android.content.res.ColorStateList.valueOf(primary)
+        }
+        resultCard.addView(upscaleProgressBar, c.matchWrap(top = 4))
+
+        // 放大强度：SeekBar（0.05–0.99），值实时显示在右侧
+        val strengthRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+        strengthRow.addView(smallLabel(c.getString(R.string.s_529)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        upscaleStrengthText = TextView(c).apply {
+            textSize = 12f
+            setTextColor(primary)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.END
+        }
+        strengthRow.addView(upscaleStrengthText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        resultCard.addView(strengthRow, c.matchWrap(top = 10))
+
+        upscaleStrengthBar = SeekBar(c).apply {
+            max = 94              // 0.05 → 0.99, paso 0.01
+            // roundToInt, no toInt: 0.35f * 100 = 34.999… y toInt() trunca a 34 (→ 0.34)
+            progress = ((loadParam(KEY_UPSCALE_STRENGTH, "0.35").toFloatOrNull() ?: 0.35f) * 100f).roundToInt() - 5
+            progressTintList = android.content.res.ColorStateList.valueOf(primary)
+            thumbTintList = android.content.res.ColorStateList.valueOf(primary)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+                    updateUpscaleStrengthLabel()
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {
+                    val v = (sb?.progress ?: 0) / 100f + 0.05f
+                    prefs().edit().putString(KEY_UPSCALE_STRENGTH, v.toString()).apply()
+                }
+            })
+        }
+        resultCard.addView(upscaleStrengthBar, c.matchWrap(top = 4))
+        resultCard.addView(TextView(c).apply {
+            text = c.getString(R.string.s_531)
+            textSize = 10.5f
+            setTextColor(subText)
+            setPadding(0, c.dp(3), 0, 0)
+        })
+        updateUpscaleStrengthLabel()
+
+        // 放大方式：图生图重绘（img2img）还是 sd.cpp 原生 hires fix
+        upscaleModeSpinner = choiceSpinner(
+            listOf(c.getString(R.string.s_538), c.getString(R.string.s_539))
+        )
+        upscaleModeSpinner.setSelection(
+            loadInt(KEY_UPSCALE_MODE, 1).coerceIn(0, 1), false)
+        upscaleModeSpinner.onItemSelectedListener = persistSpinner(KEY_UPSCALE_MODE)
+        resultCard.addView(
+            paramRow(c.getString(R.string.s_540), upscaleModeSpinner, c.getString(R.string.s_541)),
+            c.matchWrap(top = 10)
+        )
+
+        // 原生 hires fix 的放大器（只有选了 hires nativo才有意义，先按 upscaler 列表给全）
+        upscaleUpscalerSpinner = choiceSpinner(
+            SdCppEngine.HiresUpscaler.entries.map { it.label })
+        upscaleUpscalerSpinner.setSelection(
+            loadInt(KEY_UPSCALE_UPSCALER, 0).coerceIn(0, SdCppEngine.HiresUpscaler.entries.size - 1), false)
+        upscaleUpscalerSpinner.onItemSelectedListener = persistSpinner(KEY_UPSCALE_UPSCALER)
+        resultCard.addView(
+            paramRow(c.getString(R.string.s_542), upscaleUpscalerSpinner, c.getString(R.string.s_543)),
+            c.matchWrap(top = 10)
+        )
+
         resultCard.addView(saveBtn, c.matchWrap(top = 10))
 
         // 结果图一键送去「图生图」当参考图，或送去「Tagger」当输入图
@@ -2160,6 +2302,242 @@ class DrawPage(
     /** 用户是否已请求中断当前生成（用于把“取消”与“真失败”区分开）。 */
     @Volatile private var cancelRequested = false
 
+    /**
+     * 放大强度：0.05（几乎原图，只补细节）→ 0.99（几乎重画）。
+     * SeekBar progress 0..94 mapea a 0.05..0.99。
+     */
+    private fun currentUpscaleStrength(): Float =
+        (upscaleStrengthBar.progress / 100f + 0.05f).coerceIn(0.05f, 0.99f)
+
+    /** 刷新「放大强度」旁边的实时数值 */
+    private fun updateUpscaleStrengthLabel() {
+        if (!::upscaleStrengthText.isInitialized || !::upscaleStrengthBar.isInitialized) return
+        val v = currentUpscaleStrength()
+        // Locale.US: que el separador decimal sea siempre punto, no coma (evita "0,35")
+        upscaleStrengthText.text = c.getString(R.string.s_530, String.format(java.util.Locale.US, "%.2f", v))
+    }
+
+    /**
+     * 放大最后一张图（2×）。
+     *
+     * 走「图生图」通道：把当前结果当参考图（initImage）以 2× 尺寸重绘，
+     * strength（可调，默认 0.35）决定重绘幅度 —— 越小越贴原图、只补细节。
+     * 这比「同种子重新抽卡」稳得多：同种子换分辨率并不保证同一张脸。
+     */
+    private fun upscaleLast() {
+        val src = lastImage
+        if (src == null) {
+            c.toast(c.getString(R.string.s_183), short = true)
+            return
+        }
+        if (DrawCore.busy) {
+            Toast.makeText(c, c.getString(R.string.s_428), Toast.LENGTH_LONG).show()
+            return
+        }
+        val prompt = promptEdit.text.toString().trim()
+        if (prompt.isEmpty()) {
+            Toast.makeText(c, c.getString(R.string.s_047), Toast.LENGTH_SHORT).show()
+            return
+        }
+        persistAll()
+
+        val startedAt = System.currentTimeMillis()
+        setGenerating(true)
+        progressText.visibility = View.VISIBLE
+        progressText.text = c.getString(R.string.s_525)
+        curStep = 0
+        totalStep = 0
+        progressBar.progress = 0
+        progressBar.visibility = View.VISIBLE
+        // 放大专用进度条（结果页那条），跟进度文字一起显示
+        if (::upscaleProgressBar.isInitialized) {
+            upscaleProgressBar.progress = 0
+            upscaleProgressBar.visibility = View.VISIBLE
+        }
+        if (::upscaleProgressText.isInitialized) {
+            upscaleProgressText.visibility = View.VISIBLE
+            upscaleProgressText.text = c.getString(R.string.s_525)
+        }
+        onStatus?.invoke(c.getString(R.string.s_525), false)
+
+        // 2× 尺寸，夹到 2048（sd.cpp 上限）；步数用当前值，img2img 步数少但要够
+        val w = (src.width * 2).let { (it / 64) * 64 }.coerceIn(64, 2048)
+        val hgt = (src.height * 2).let { (it / 64) * 64 }.coerceIn(64, 2048)
+        val steps = stepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20
+        val cfg = cfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f
+        val seed = seedEdit.text.toString().toLongOrNull()?.takeIf { it >= 0 } ?: System.currentTimeMillis()
+        val strength = currentUpscaleStrength()   // 用户可调：0.05 = 几乎原图, 0.99 = 几乎重画
+
+        // 放大方式：0 = 图生图重绘（原图当参考图重画），1 = sd.cpp 原生 hires fix
+        // 原生 hires fix 是另一条路：第一轮照常按原尺寸出图，再由 sd.cpp 内部把 latent
+        // 放大并做第二轮降噪 —— 构图不重随、prompt token 不额外消耗。
+        val mode = if (::upscaleModeSpinner.isInitialized) upscaleModeSpinner.selectedItemPosition else 1
+        val useNativeHires = mode == 1
+        val upscaler = if (::upscaleUpscalerSpinner.isInitialized) {
+            SdCppEngine.HiresUpscaler.entries.getOrElse(
+                upscaleUpscalerSpinner.selectedItemPosition) { SdCppEngine.HiresUpscaler.LATENT }
+        } else {
+            SdCppEngine.HiresUpscaler.LATENT
+        }
+        // 原生 hires：第一轮尺寸 = 原图尺寸，目标 = 2×
+        val firstW = if (useNativeHires) ((src.width / 64) * 64).coerceIn(64, 2048) else w
+        val firstH = if (useNativeHires) ((src.height / 64) * 64).coerceIn(64, 2048) else hgt
+        // 原生 hires 的第二轮降噪强度直接用同一个 slider（0.05–0.99）
+        // hires 原生用的是 denoising_strength：0 = 完全保留放大后的 latent（只放大不加细节），
+        // 1 = 全部重新采样（构图会丢）。slider 的 0.05–0.99 直接传过去太极端，
+        // 所以映射到 hires 真正好用的区间 0.15–0.55：
+        //   0.15 = 几乎原图 + 轻微锐化（保守）
+        //   0.35 = 平衡（默认）
+        //   0.55 = 明显加细节（可能动构图）
+        val hiresDenoise = if (useNativeHires) {
+            (0.15f + (strength - 0.05f) * (0.40f / 0.94f)).coerceIn(0.10f, 0.60f)
+        } else 0.7f
+
+        scope.launch {
+            val ticker = launch {
+                while (true) {
+                    delay(1000)
+                    val sec = (System.currentTimeMillis() - startedAt) / 1000
+                    progressText.post {
+                        // 放大用自己的阶段词（"Ampliando…"），别用普通生成的"Cargando modelo…"
+                        val phase = if (sec < 8) c.getString(R.string.s_525) else c.getString(R.string.s_129)
+                        val stepInfo = if (totalStep > 0) c.getString(R.string.v_049, curStep, totalStep) else ""
+                        progressText.text = c.getString(R.string.v_050, phase, stepInfo, sec)
+                        if (::procStepText.isInitialized) {
+                            procStepText.text = c.getString(R.string.v_050, phase, stepInfo, sec)
+                        }
+                        if (totalStep > 0) {
+                            progressBar.progress = (curStep * 100 / totalStep).coerceIn(0, 100)
+                            if (::procProgressBar.isInitialized) {
+                                procProgressBar.progress = (curStep * 100 / totalStep).coerceIn(0, 100)
+                            }
+                        }
+                        // 放大进度条（结果页）：同源数据
+                        if (::upscaleProgressBar.isInitialized) {
+                            if (totalStep > 0) {
+                                upscaleProgressBar.progress = (curStep * 100 / totalStep).coerceIn(0, 100)
+                            }
+                            if (::upscaleProgressText.isInitialized) {
+                                upscaleProgressText.text = c.getString(R.string.v_050, phase, stepInfo, sec)
+                            }
+                        }
+                    }
+                }
+            }
+            try {
+                val h = sdHandle
+                if (h == 0L) throw IllegalStateException(c.getString(R.string.s_163))
+                if (mainModel == null) throw IllegalStateException(c.getString(R.string.s_121))
+                val lora = if (useLora) activeLora() else null
+                val negative = negEdit.text.toString()
+                val sampler = pickSampler(lora != null)
+                val scheduler = pickScheduler(lora != null)
+                val loraScale = loraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f
+
+                val bmp = withContext(Dispatchers.IO) {
+                    if (useNativeHires) {
+                        // 原生 hires fix：不用 init_image，让 sd.cpp 自己放大 latent + 二次降噪。
+                        // 第一轮尺寸 = 原图尺寸（保持构图），目标尺寸 = 2×。
+                        SdCppEngine.render(
+                            handle = h,
+                            prompt = prompt,
+                            negative = negative,
+                            loraPath = lora?.absolutePath,
+                            loraScale = loraScale,
+                            width = firstW,
+                            height = firstH,
+                            steps = steps,
+                            cfg = cfg,
+                            seed = seed,
+                            sampler = sampler,
+                            scheduler = scheduler,
+                            cb = { cur, total -> curStep = cur; totalStep = total },
+                            hiresEnabled = true,
+                            hiresTargetWidth = w,
+                            hiresTargetHeight = hgt,
+                            hiresSteps = steps,
+                            hiresDenoiseStrength = hiresDenoise,
+                            hiresUpscaler = upscaler,
+                        )
+                    } else {
+                        // 图生图重绘：原图当参考图，按 2× 尺寸重画
+                        val rgb = SdCppEngine.bitmapToRgb888(src)
+                        SdCppEngine.render(
+                            handle = h,
+                            prompt = prompt,
+                            negative = negative,
+                            loraPath = lora?.absolutePath,
+                            loraScale = loraScale,
+                            width = w,
+                            height = hgt,
+                            steps = steps,
+                            cfg = cfg,
+                            seed = seed,
+                            sampler = sampler,
+                            scheduler = scheduler,
+                            cb = { cur, total -> curStep = cur; totalStep = total },
+                            initImage = rgb,
+                            initWidth = src.width,
+                            initHeight = src.height,
+                            strength = strength,
+                        )
+                    }
+                } ?: throw IllegalStateException(c.getString(R.string.s_147))
+
+                ticker.cancel()
+                val sec = (System.currentTimeMillis() - startedAt) / 1000
+                val img = ImageData(bmp, seed)
+                resultImg.post {
+                    DrawHistory.add(img)
+                    lastImage = bmp
+                    resultImg.setImageBitmap(bmp)
+                    resultInfo.text = c.getString(R.string.v_051, bmp.width, bmp.height, seed, sec)
+                    refreshHistory()
+                    switchPane(toResult = true)
+                }
+                val doneTxt = c.getString(R.string.v_052, bmp.width, bmp.height, seed, sec)
+                progressText.post { progressText.text = doneTxt }
+                if (::procStepText.isInitialized) procStepText.post { procStepText.text = doneTxt }
+                // 放大完成：进度条填满再藏起来
+                if (::upscaleProgressBar.isInitialized) {
+                    upscaleProgressBar.post {
+                        upscaleProgressBar.progress = 100
+                        upscaleProgressBar.visibility = View.GONE
+                    }
+                }
+                if (::upscaleProgressText.isInitialized) {
+                    upscaleProgressText.post { upscaleProgressText.visibility = View.GONE }
+                }
+                onStatus?.invoke(c.getString(R.string.v_053, sec), false)
+            } catch (e: Throwable) {
+                ticker.cancel()
+                val sec = (System.currentTimeMillis() - startedAt) / 1000
+                if (cancelRequested) {
+                    val stopTxt = c.getString(R.string.v_054, sec)
+                    progressText.post { progressText.text = stopTxt }
+                    if (::procStepText.isInitialized) procStepText.post { procStepText.text = stopTxt }
+                    onStatus?.invoke(c.getString(R.string.s_154), false)
+                } else {
+                    val errTxt = c.getString(R.string.v_059, sec, e.message ?: e.javaClass.simpleName) + "\n" + c.getString(R.string.v_060)
+                    progressText.post { progressText.text = errTxt }
+                    if (::procStepText.isInitialized) procStepText.post { procStepText.text = errTxt }
+                    onStatus?.invoke(c.getString(R.string.v_055, e.message ?: e.javaClass.simpleName), true)
+                }
+            } finally {
+                setGenerating(false)
+                progressBar.post { progressBar.visibility = View.GONE }
+                // 放大出错/取消：进度条也收起来
+                if (::upscaleProgressBar.isInitialized) {
+                    upscaleProgressBar.post { upscaleProgressBar.visibility = View.GONE }
+                }
+                if (::upscaleProgressText.isInitialized) {
+                    upscaleProgressText.post { upscaleProgressText.visibility = View.GONE }
+                }
+                switchResultPage(0)
+            }
+        }
+    }
+
     /** 供对话页复用的生成入口：把输入当正面提示词，其余参数取绘图页当前设置。 */
     suspend fun generateImage(
         prompt: String,
@@ -2436,6 +2814,10 @@ class DrawPage(
             i2iGenBtn.text = if (g) c.getString(R.string.s_040) else c.getString(R.string.s_098)
             i2iGenBtn.setBackgroundColor(if (g) pal.stop else primary)
         }
+        // 结果页的「取消生成」按钮：只在出图中显示
+        if (::resultCancelBtn.isInitialized) resultCancelBtn.post {
+            resultCancelBtn.visibility = if (g) View.VISIBLE else View.GONE
+        }
     }
 
     fun cancel() {
@@ -2461,6 +2843,16 @@ class DrawPage(
     }
 
     fun release() {
+        // 出图还在跑时不能 free native 句柄：sd.cpp 的 free_sd_ctx 会销毁正在使用的
+        // VAE/UNet，ggml_runner 撞上 GGML_ASSERT(!graph_active_) 直接 abort，
+        // 整个进程 native crash（SIGABRT）。交给 native 侧的延迟释放处理。
+        if (DrawCore.uiBusy) {
+            // 让引擎自己收尾：nativeFree 会登记成 pending，推理线程退出时再真正释放。
+            DrawCore.release()
+            if (sdHandle != 0L) runCatching { SdCppEngine.nativeFree(sdHandle) }
+            sdHandle = 0L
+            return
+        }
         DrawCore.release()   // 顺序不能反：先断开 API 侧的引用，再真正释放 native 句柄
         if (sdHandle != 0L) runCatching { SdCppEngine.nativeFree(sdHandle) }
         sdHandle = 0L
@@ -2630,6 +3022,124 @@ class DrawPage(
     }
 
     /** 宽 × 高 输入行 */
+    /**
+     * 尺寸预设按钮组：64/128/256/384/512 + 「Personalizado」。
+     *
+     * 选预设 → 直接把 width/height 填好；选 Personalizado → 显示自定义输入行。
+     * 用户手改宽高后自动切回「Personalizado」（避免按钮状态和实际值对不上）。
+     */
+    private fun sizePresetRow(): View {
+        val wrap = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        wrap.addView(smallLabel(c.getString(R.string.s_532)))
+
+        val presets = SIZE_PRESETS
+        val row = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        sizePresetButtons.clear()
+        presets.forEachIndexed { idx, px ->
+            val b = android.widget.Button(c).apply {
+                text = "$px"
+                textSize = 12f
+                setTextColor(textColor)
+                isAllCaps = false
+                setPadding(c.dp(4), c.dp(2), c.dp(4), c.dp(2))
+                setOnClickListener {
+                    applySizePreset(idx)
+                }
+            }
+            sizePresetButtons.add(b)
+            row.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = c.dp(2)
+                marginEnd = c.dp(2)
+            })
+        }
+        // 「Personalizado」按钮：放进同一行，权重稍大（文字更长）
+        val customBtn = android.widget.Button(c).apply {
+            text = c.getString(R.string.s_533)
+            textSize = 11f
+            setTextColor(textColor)
+            isAllCaps = false
+            setPadding(c.dp(4), c.dp(2), c.dp(4), c.dp(2))
+            setOnClickListener { applySizePreset(-1) }
+        }
+        // 放最后，方便 applySizePreset 用 index == -1 表示「自定义」并统一高亮
+        sizePresetButtons.add(customBtn)
+        row.addView(customBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.4f).apply {
+            marginStart = c.dp(4)
+        })
+        wrap.addView(row, c.matchWrap(top = 4))
+
+        // 自定义宽高输入行（默认隐藏，选「Personalizado」才出现）
+        val customRow = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        customRow.addView(smallLabel(c.getString(R.string.s_534)))
+        val fields = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+        fields.addView(widthEdit, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        fields.addView(TextView(c).apply {
+            text = " × "
+            textSize = 14f
+            setTextColor(textColor)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        fields.addView(heightEdit, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        customRow.addView(fields, c.matchWrap(top = 4))
+        customRow.addView(TextView(c).apply {
+            text = c.getString(R.string.s_535)
+            textSize = 10.5f
+            setTextColor(subText)
+            setPadding(0, c.dp(3), 0, 0)
+        })
+        customRow.visibility = View.GONE
+        customSizeRow = customRow
+        wrap.addView(customRow, c.matchWrap(top = 6))
+
+        // 初始状态：按当前宽高判断落在哪个预设上
+        val cur = widthEdit.text.toString().toIntOrNull()
+        val idx = presets.indexOf(cur).takeIf { it >= 0 && heightEdit.text.toString().toIntOrNull() == cur }
+        applySizePreset(idx ?: -1, updateFields = false)
+
+        // 用户手改宽高 → 自动切到「Personalizado」，并显示输入行
+        // （否则按钮高亮和实际值会对不上，误导用户）
+        val watcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (suppressPresetSync) return
+                val w = widthEdit.text.toString().toIntOrNull()
+                val h = heightEdit.text.toString().toIntOrNull()
+                val match = presets.indexOf(w).takeIf { it >= 0 && h == w }
+                if (match == null && selectedSizePreset != null) {
+                    applySizePreset(-1, updateFields = false)
+                }
+            }
+        }
+        widthEdit.addTextChangedListener(watcher)
+        heightEdit.addTextChangedListener(watcher)
+
+        return wrap
+    }
+
+    /** 高亮选中的预设按钮，并显示/隐藏自定义输入行 */
+    private fun applySizePreset(index: Int, updateFields: Boolean = true) {
+        if (updateFields && index >= 0) {
+            val px = SIZE_PRESETS.getOrNull(index) ?: return
+            suppressPresetSync = true
+            widthEdit.setText(px.toString())
+            heightEdit.setText(px.toString())
+            suppressPresetSync = false
+        }
+        selectedSizePreset = if (index >= 0) index else null
+        sizePresetButtons.forEachIndexed { i, b ->
+            // 最后一个是「Personalizado」：index == -1 时高亮它
+            val isCustom = i == sizePresetButtons.size - 1
+            val on = if (isCustom) index == -1 else i == index
+            b.setBackgroundColor(if (on) pal.primary else pal.fieldBg)
+            b.setTextColor(if (on) pal.bg else textColor)
+        }
+        customSizeRow?.visibility = if (index == -1) View.VISIBLE else View.GONE
+    }
+
     private fun whRow(label: String, hint: String, wEdit: EditText, hEdit: EditText): View {
         val wrap = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         wrap.addView(smallLabel(label))
@@ -2696,6 +3206,9 @@ class DrawPage(
         put(KEY_CFG, cfgEdit)
         put(KEY_SEED, seedEdit)
         put(KEY_LORA_SCALE, loraScaleEdit)
+        if (::upscaleStrengthBar.isInitialized) {
+            e.putString(KEY_UPSCALE_STRENGTH, currentUpscaleStrength().toString())
+        }
         e.putInt(KEY_SAMPLER, samplerSpinner.selectedItemPosition)
         e.putInt(KEY_SCHEDULER, schedulerSpinner.selectedItemPosition)
         if (::i2iStepsEdit.isInitialized) {

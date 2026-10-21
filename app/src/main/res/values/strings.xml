@@ -197,6 +197,14 @@
 <string name="s_201">+ New chat</string>
 <string name="s_202">🎨 Generating image…</string>
 <string name="s_203">🖼️ Result</string>
+<string name="s_529">Upscale strength</string>
+<string name="s_530">%1$s</string>
+<string name="s_531">Lower = closer to the original (0.05–0.99). 0.35 is a good starting point: same composition, more detail.</string>
+<string name="s_524">Upscale (2×)</string>
+<string name="s_525">Upscaling…</string>
+<string name="s_526">Upscaled: %1$d×%2$d</string>
+<string name="s_527">Upscale failed: %1$s</string>
+<string name="s_528">Upscale re-draws the current image at 2× resolution with low denoise strength, so the composition stays and the detail improves.</string>
 <string name="s_204">🤔 Switched to thinking mode (session rebuilt, history kept)</string>
 <string name="s_205">🤔 Reasoning (tap to expand)</string>
 <string name="s_206">🤔 Reasoning (tap to collapse)</string>
@@ -554,4 +562,16 @@
 
     <string name="s_522">LoRA</string>
     <string name="s_523">Distilled model: %1$d steps · CFG 1</string>
+    <string name="s_532">Size preset</string>
+    <string name="s_533">Custom</string>
+    <string name="s_534">Custom size (px)</string>
+    <string name="s_535">Width and height must be multiples of 64 (they are rounded down automatically). 512x512 is the native SD1.5 resolution; 256 is much faster and good for a first try.</string>
+    <string name="s_536">Cancel generation</string>
+    <string name="s_537">Cancel the running generation. It takes effect after the current step finishes.</string>
+    <string name="s_538">Redraw (img2img)</string>
+    <string name="s_539">Native hi-res fix</string>
+    <string name="s_540">Upscale method</string>
+    <string name="s_541">Redraw uses the image as an img2img reference: the prompt is re-consumed and the composition may shift. Native hi-res fix runs inside stable-diffusion.cpp: it upscales the latent and denoises a second time, so the composition stays put and no extra prompt tokens are spent.</string>
+    <string name="s_542">Upscaler</string>
+    <string name="s_543">Latent upscaling runs in latent space (cheapest). Lanczos decodes to pixels first (sharpest, slowest).</string>
 </resources>

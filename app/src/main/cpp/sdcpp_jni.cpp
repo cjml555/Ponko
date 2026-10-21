@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,16 @@ struct SdHandle {
     jobject   pcb = nullptr;    // PreviewCallback（GlobalRef）
     jmethodID pcb_mid = nullptr; // onPreview(III[B)V
     std::atomic<bool> cancelled{false};
+
+    // 生命周期保护：nativeFree 可能在推理线程还在跑的时候被调用（Activity onDestroy、
+    // 换模型、切主题…）。此时不能直接 free_sd_ctx —— 那会销毁正在使用的 VAE/UNet，
+    // ggml_runner 的 runner_end() 会撞上 GGML_ASSERT(!graph_active_) 直接 abort，
+    // 表现为 native crash (SIGABRT)，整进程挂掉。
+    // 做法：推理期间 free 只置标志，等推理结束后再真正释放。
+    std::mutex         busy_lock;        // 保护 busy / free_pending
+    bool               busy = false;     // 是否有推理在飞
+    bool               free_pending = false; // free 请求已登记，等推理结束再执行
+    std::atomic<bool> freed{false};      // 句柄是否已被释放（防止二次 free）
 };
 
 SdHandle* g_active = nullptr;  // 同时只允许一个生成（进度回调是全局的）
@@ -230,6 +241,10 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeCreate(
 // initData 非空 → 图生图（img2img）：RGB888 交错字节（每像素 3 字节，行优先，左上原点），
 // sd.cpp 会把它按 request 尺寸缩放后编码进 latent，并按 strength(<1) 决定起始噪声步数。
 // initData 为空 → 文生图，strength 忽略。
+//
+// hiresEnabled → 走 sd.cpp 原生 hires fix：先按 width/height 出图，再在
+// latent 空间（或像素空间）放大到 hiresTargetWidth/Height 并做第二轮降噪。
+// 这是 sd.cpp 内部实现，不需要把图重新编码回 init_image，也不会重随机构图。
 extern "C" JNIEXPORT jintArray JNICALL
 Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
         JNIEnv* env, jobject /*thiz*/,
@@ -239,9 +254,22 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
         jint width, jint height, jint steps, jfloat cfg, jlong seed,
         jint sampleMethod, jint scheduler,
         jobject cb, jobject pcb,
-        jbyteArray initData, jint initWidth, jint initHeight, jfloat strength) {
+        jbyteArray initData, jint initWidth, jint initHeight, jfloat strength,
+        jboolean hiresEnabled, jint hiresTargetWidth, jint hiresTargetHeight,
+        jint hiresSteps, jfloat hiresDenoiseStrength, jint hiresUpscaler) {
     SdHandle* h = reinterpret_cast<SdHandle*>(handle);
     if (h == nullptr || h->ctx == nullptr) return nullptr;
+
+    // 标记「推理在飞」：nativeFree 看到这个标志就不会直接 free_sd_ctx，
+    // 而是等这里收尾后再释放（否则 use-after-free 会让 ggml abort 掉整个进程）。
+    {
+        std::lock_guard<std::mutex> lk(h->busy_lock);
+        if (h->freed.load()) {
+            LOGE("generate: handle already freed");
+            return nullptr;
+        }
+        h->busy = true;
+    }
 
     std::string sPrompt, sNeg, sLora;
     jstr(env, prompt, sPrompt);
@@ -324,6 +352,39 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
     g.sample_params.sample_method = static_cast<enum sample_method_t>(sampleMethod);
     g.sample_params.scheduler     = static_cast<enum scheduler_t>(scheduler);
 
+    // ---- 原生 hires fix（sd.cpp 内部实现）----
+    // 与 img2img 重绘不同：这里第一轮照常按 width/height 出图，然后 sd.cpp 把 latent
+    // 放大到 target 尺寸再跑第二轮降噪。构图不会被重新随机，prompt token 也不额外消耗。
+    if (hiresEnabled == JNI_TRUE && hiresTargetWidth > 0 && hiresTargetHeight > 0) {
+        g.hires.enabled            = true;
+        g.hires.target_width       = hiresTargetWidth;
+        g.hires.target_height      = hiresTargetHeight;
+        g.hires.scale              = static_cast<float>(hiresTargetWidth) / static_cast<float>(width);
+        g.hires.model_path         = nullptr;   // 不用 ESRGAN 模型，用内置 latent/lanczos
+        // hires.steps 是「第二轮降噪的有效步数」，而 sd.cpp 内部会算
+        // scheduler_steps = steps / denoising_strength 再裁剪 sigma。
+        // 如果直接沿用第一轮的 steps（turbo 只有 4 步），裁出来只剩 1 个 sigma ——
+        // 等于在最高噪声上重新采样，构图全丢。
+        // 所以这里给 hires 自己的步数：至少 8 步，且不低于第一轮步数。
+        int hiresStepCount = hiresSteps > 0 ? hiresSteps : steps;
+        if (hiresStepCount < 8) hiresStepCount = 8;
+        g.hires.steps              = hiresStepCount;
+        g.hires.denoising_strength = hiresDenoiseStrength > 0.f ? hiresDenoiseStrength : 0.7f;
+        g.hires.upscale_tile_size  = 128;
+        g.hires.custom_sigmas      = nullptr;
+        g.hires.custom_sigmas_count = 0;
+        // upscaler 由 Kotlin 传 enum 值；越界就退回 LATENT
+        int up = hiresUpscaler;
+        if (up < SD_HIRES_UPSCALER_NONE || up >= SD_HIRES_UPSCALER_COUNT) {
+            up = SD_HIRES_UPSCALER_LATENT;
+        }
+        g.hires.upscaler = static_cast<enum sd_hires_upscaler_t>(up);
+        LOGI("hires fix enabled: %dx%d -> %dx%d, upscaler=%s, steps=%d, denoise=%.2f",
+             width, height, hiresTargetWidth, hiresTargetHeight,
+             sd_hires_upscaler_name(g.hires.upscaler),
+             g.hires.steps, g.hires.denoising_strength);
+    }
+
     char* gdump = sd_img_gen_params_to_str(&g);
     LOGI("generate_image: %s", gdump ? gdump : "(null)");
     if (gdump) free(gdump);
@@ -366,6 +427,22 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
     sd_set_progress_callback(nullptr, nullptr);
     sd_set_preview_callback(nullptr, PREVIEW_NONE, 1, true, false, nullptr);
     g_active = nullptr;
+
+    // 推理收尾：清 busy 标志；若期间有人请求了 free，这里替他完成释放。
+    bool must_free = false;
+    {
+        std::lock_guard<std::mutex> lk(h->busy_lock);
+        h->busy = false;
+        must_free = h->free_pending;
+        h->free_pending = false;
+    }
+    if (must_free) {
+        // 注意：此刻已经没有任何线程在用 h->ctx 了，可以安全释放。
+        if (h->ctx != nullptr) free_sd_ctx(h->ctx);
+        h->ctx = nullptr;
+        delete h;
+        LOGI("ctx freed (deferred)");
+    }
     return result;
 }
 
@@ -373,6 +450,7 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_yumenode_ai_draw_SdCppEngine_nativeCancel(JNIEnv* /*env*/, jobject /*thiz*/, jlong handle) {
     SdHandle* h = reinterpret_cast<SdHandle*>(handle);
     if (h == nullptr) return;
+    if (h->freed.load()) return;   // 句柄已释放（或正在等推理收尾），别碰它
     h->cancelled.store(true);
     if (h->ctx != nullptr) sd_cancel_generation(h->ctx, SD_CANCEL_ALL);
     LOGI("cancel requested");
@@ -382,6 +460,22 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_yumenode_ai_draw_SdCppEngine_nativeFree(JNIEnv* env, jobject /*thiz*/, jlong handle) {
     SdHandle* h = reinterpret_cast<SdHandle*>(handle);
     if (h == nullptr) return;
+    if (h->freed.exchange(true)) return;   // 已经释放过，别二次 free
+
+    bool defer = false;
+    {
+        std::lock_guard<std::mutex> lk(h->busy_lock);
+        if (h->busy) {
+            // 推理还在飞：不能现在 free_sd_ctx（会 use-after-free 崩 ggml）。
+            // 登记成 pending，推理线程退出时自己完成释放。
+            h->free_pending = true;
+            defer = true;
+        }
+    }
+    if (defer) {
+        LOGI("free deferred: generation in flight, will free after it finishes");
+        return;
+    }
     if (h->ctx != nullptr) free_sd_ctx(h->ctx);
     if (h->cb != nullptr) env->DeleteGlobalRef(h->cb);
     if (h->pcb != nullptr) env->DeleteGlobalRef(h->pcb);
