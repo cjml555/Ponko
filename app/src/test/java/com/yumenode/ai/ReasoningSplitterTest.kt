@@ -77,38 +77,29 @@ class ReasoningSplitterTest {
         assertEquals("respuesta", answer)
     }
 
-    // BUG 2 (documentado, pendiente de arreglar): el texto que precede al
-    // marcador se PIERDE. El codigo emite solo los blancos iniciales
-    // (`lead`) y luego borra el buffer hasta el final del marcador, asi que
-    // el prefijo se descarta sin emitirse nunca.
     @Test
-    fun contentBeforeTheMarkerIsCurrentlyLost() {
+    fun contentBeforeTheMarkerIsAnswer() {
         val (thought, answer) = split(listOf("prefijo<|channel>thoughtidea<channel|>final"))
         assertEquals("idea", thought)
-        assertEquals("final", answer)
+        assertEquals("prefijofinal", answer)
     }
 
     // ---------- marcador de DeepSeek / Qwen / GLM ----------
 
-    // BUG 1 (documentado, pendiente de arreglar): el marcador " thinking"
-    // (DeepSeek / Qwen / GLM) NO llega a detectarse nunca. En el estado 0 se
-    // busca en `core`, que ya no tiene los blancos iniciales, y el marcador
-    // empieza por un espacio -> findFirst nunca lo encuentra. Solo funciona
-    // el de Gemma ("<|channel>thought").
     @Test
-    fun theThinkingMarkerIsCurrentlyNotDetected() {
+    fun thinkingMarkerSplitsThoughtFromAnswer() {
         val (thought, answer) = split(listOf(" thinkingalgo que pienso<｜end▁of▁thinking｜>la respuesta"))
-        assertEquals("", thought)
-        assertEquals(" thinkingalgo que pienso<｜end▁of▁thinking｜>la respuesta", answer)
+        assertEquals("algo que pienso", thought)
+        assertEquals("la respuesta", answer)
     }
 
     @Test
-    fun theThinkingMarkerSplitInChunksIsAlsoNotDetected() {
+    fun theThinkingMarkerCanArriveSplitInChunks() {
         val (thought, answer) = split(
             listOf(" think", "ingpienso", "<｜end▁of", "▁thinking｜>respuesta")
         )
-        assertEquals("", thought)
-        assertEquals(" thinkingpienso<｜end▁of▁thinking｜>respuesta", answer)
+        assertEquals("pienso", thought)
+        assertEquals("respuesta", answer)
     }
 
     // ---------- modo assumeThinking ----------
@@ -148,24 +139,21 @@ class ReasoningSplitterTest {
 
     // ---------- casos limite ----------
 
-    // BUG 3 (documentado, pendiente de arreglar): un marcador partido al
-    // final NO se retiene. La condicion para esperar mas datos exige que
-    // TODO el core sea un prefijo posible del marcador, asi que con
-    // "Hola<|chan" el texto entero se emite como respuesta y el "<|chan"
-    // ya no se puede reconocer.
     @Test
-    fun aMarkerSplitAtTheVeryEndIsCurrentlyNotHeld() {
+    fun aMarkerSplitAtTheVeryEndIsHeldUntilTheNextChunk() {
+        // "<|chan" puede ser el inicio del marcador: se retiene en vez de
+        // emitirse como texto (y el texto que si se sabe que no es marcador
+        // se emite ya).
         val sink = Sink()
         val s = ReasoningSplitter({ sink.thought.append(it) }, { sink.answer.append(it) })
         s.feed("Hola<|chan")
-        assertEquals("Hola<|chan", sink.answer.toString())
+        assertEquals("Hola", sink.answer.toString())
 
         s.feed("nel>thoughtx<channel|>fin")
         s.finish()
-        assertEquals("", sink.thought.toString())
-        // El "<|chan" ya se habia emitido como texto, asi que el "<|channel>thought"
-        // reconstruido ya no se reconoce como marcador: todo va a respuesta.
-        assertEquals("Hola<|channel>thoughtx<channel|>fin", sink.answer.toString())
+        assertEquals("x", sink.thought.toString())
+        // "Hola" ya se habia emitido; el "fin" de despues va a respuesta.
+        assertEquals("Hola" + "fin", sink.answer.toString())
     }
 
     @Test

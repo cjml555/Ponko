@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **El splitter de razonamiento no separaba el razonamiento de DeepSeek /
+  Qwen / GLM** (`ReasoningSplitter.kt`). Los tests de caracterizacion
+  (18, nuevos) destaparon 3 bugs:
+  1. El marcador `" thinking"` **nunca se detectaba**: en el estado 0 se
+     buscaba en `core`, que ya no tiene los blancos iniciales, y el marcador
+     empieza por un espacio -> `findFirst` no lo encontraba nunca. Solo
+     funcionaba el de Gemma (`<|channel>thought`). Efecto: con esos modelos
+     el razonamiento se veia mezclado en la respuesta en vez de ir al
+     desplegable.
+  2. **El texto que precede al marcador se perdia**: el codigo emitia solo
+     los blancos iniciales (`lead`) y luego borraba el buffer hasta el final
+     del marcador, asi que el prefijo se descartaba sin emitirse.
+  3. **Un marcador partido al final no se retenia**: la condicion para
+     esperar mas datos comparaba `pendingTail(core)` (calculado sobre el
+     texto CON los blancos) contra `core.length` (SIN ellos): magnitudes
+     distintas que nunca coinciden. Con `"Hola<|chan"` el texto entero se
+     emitia y el `<|chan` ya no se podia reconocer.
+  Los tres estan corregidos y cubiertos por tests.
+
 ### Refactor — el contrato de la API local a un objeto puro
 
 - **`OpenAiApi`** (`app/src/main/java/com/yumenode/ai/OpenAiApi.kt`)
@@ -317,14 +338,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **193/193** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **211/211** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
   `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `TaggerStoreTest` 8,
   `TaggerSessionTest` 10, `TaggerReadyEquivalenceTest` 2,
   `DrawFileImporterTest` 5, `ContextBudgetTest` 12, `UiScaleTest` 12,
   `DownloadIntegrityTest` 19, `DownloadProgressTest` 18, `OpenAiApiTest` 28,
-  `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73310231 bytes)
+  `ReasoningSplitterTest` 18, `ThreadRecommendationTest` 3;
+  0 fallos, 0 errores, 0 omitidos)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73310295 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - **Verificación en dispositivo** (Motorola Edge 50 Fusion, Android 16,
