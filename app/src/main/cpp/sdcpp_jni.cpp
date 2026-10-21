@@ -241,6 +241,10 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeCreate(
 // initData 非空 → 图生图（img2img）：RGB888 交错字节（每像素 3 字节，行优先，左上原点），
 // sd.cpp 会把它按 request 尺寸缩放后编码进 latent，并按 strength(<1) 决定起始噪声步数。
 // initData 为空 → 文生图，strength 忽略。
+//
+// hiresEnabled → 走 sd.cpp 原生 hires fix：先按 width/height 出图，再在
+// latent 空间（或像素空间）放大到 hiresTargetWidth/Height 并做第二轮降噪。
+// 这是 sd.cpp 内部实现，不需要把图重新编码回 init_image，也不会重随机构图。
 extern "C" JNIEXPORT jintArray JNICALL
 Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
         JNIEnv* env, jobject /*thiz*/,
@@ -250,7 +254,9 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
         jint width, jint height, jint steps, jfloat cfg, jlong seed,
         jint sampleMethod, jint scheduler,
         jobject cb, jobject pcb,
-        jbyteArray initData, jint initWidth, jint initHeight, jfloat strength) {
+        jbyteArray initData, jint initWidth, jint initHeight, jfloat strength,
+        jboolean hiresEnabled, jint hiresTargetWidth, jint hiresTargetHeight,
+        jint hiresSteps, jfloat hiresDenoiseStrength, jint hiresUpscaler) {
     SdHandle* h = reinterpret_cast<SdHandle*>(handle);
     if (h == nullptr || h->ctx == nullptr) return nullptr;
 
@@ -345,6 +351,39 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
     g.sample_params.guidance.txt_cfg = cfg;
     g.sample_params.sample_method = static_cast<enum sample_method_t>(sampleMethod);
     g.sample_params.scheduler     = static_cast<enum scheduler_t>(scheduler);
+
+    // ---- 原生 hires fix（sd.cpp 内部实现）----
+    // 与 img2img 重绘不同：这里第一轮照常按 width/height 出图，然后 sd.cpp 把 latent
+    // 放大到 target 尺寸再跑第二轮降噪。构图不会被重新随机，prompt token 也不额外消耗。
+    if (hiresEnabled == JNI_TRUE && hiresTargetWidth > 0 && hiresTargetHeight > 0) {
+        g.hires.enabled            = true;
+        g.hires.target_width       = hiresTargetWidth;
+        g.hires.target_height      = hiresTargetHeight;
+        g.hires.scale              = static_cast<float>(hiresTargetWidth) / static_cast<float>(width);
+        g.hires.model_path         = nullptr;   // 不用 ESRGAN 模型，用内置 latent/lanczos
+        // hires.steps 是「第二轮降噪的有效步数」，而 sd.cpp 内部会算
+        // scheduler_steps = steps / denoising_strength 再裁剪 sigma。
+        // 如果直接沿用第一轮的 steps（turbo 只有 4 步），裁出来只剩 1 个 sigma ——
+        // 等于在最高噪声上重新采样，构图全丢。
+        // 所以这里给 hires 自己的步数：至少 8 步，且不低于第一轮步数。
+        int hiresStepCount = hiresSteps > 0 ? hiresSteps : steps;
+        if (hiresStepCount < 8) hiresStepCount = 8;
+        g.hires.steps              = hiresStepCount;
+        g.hires.denoising_strength = hiresDenoiseStrength > 0.f ? hiresDenoiseStrength : 0.7f;
+        g.hires.upscale_tile_size  = 128;
+        g.hires.custom_sigmas      = nullptr;
+        g.hires.custom_sigmas_count = 0;
+        // upscaler 由 Kotlin 传 enum 值；越界就退回 LATENT
+        int up = hiresUpscaler;
+        if (up < SD_HIRES_UPSCALER_NONE || up >= SD_HIRES_UPSCALER_COUNT) {
+            up = SD_HIRES_UPSCALER_LATENT;
+        }
+        g.hires.upscaler = static_cast<enum sd_hires_upscaler_t>(up);
+        LOGI("hires fix enabled: %dx%d -> %dx%d, upscaler=%s, steps=%d, denoise=%.2f",
+             width, height, hiresTargetWidth, hiresTargetHeight,
+             sd_hires_upscaler_name(g.hires.upscaler),
+             g.hires.steps, g.hires.denoising_strength);
+    }
 
     char* gdump = sd_img_gen_params_to_str(&g);
     LOGI("generate_image: %s", gdump ? gdump : "(null)");

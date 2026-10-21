@@ -197,7 +197,15 @@
     <string name="s_201">＋ 新建对话</string>
     <string name="s_202">🎨 正在生成图片…</string>
     <string name="s_203">🖼️ 结果</string>
-    <string name="s_204">🤔 已切换为思考模式（会话已按新模式重建，历史保留）</string>
+    <string name="s_529">放大强度</string>
+    <string name="s_530">%1$s</string>
+    <string name="s_531">数值越小越接近原图（0.05–0.99）。0.35 是不错的起点：构图不变，细节更多。</string>
+<string name="s_524">放大 (2×)</string>
+    <string name="s_525">正在放大…</string>
+    <string name="s_526">已放大：%1$d×%2$d</string>
+    <string name="s_527">放大失败：%1$s</string>
+    <string name="s_528">放大会以低强度在双倍分辨率下重新绘制当前图像，保持构图的同时提升细节。</string>
+<string name="s_204">🤔 已切换为思考模式（会话已按新模式重建，历史保留）</string>
     <string name="s_205">🤔 思考过程（点击展开）</string>
     <string name="s_206">🤔 思考过程（点击收起）</string>
     <string name="v_001">%1$s 轮</string>
@@ -480,4 +488,12 @@
     <string name="s_533">自定义</string>
     <string name="s_534">自定义尺寸（像素）</string>
     <string name="s_535">宽和高必须是 64 的倍数（会自动向下取整）。512x512 是 SD1.5 的原生分辨率；256 更快，适合首次尝试。</string>
+    <string name="s_536">取消生成</string>
+    <string name="s_537">取消正在进行的生成。当前采样步结束后生效。</string>
+    <string name="s_538">重绘（img2img）</string>
+    <string name="s_539">原生高分辨率修复</string>
+    <string name="s_540">放大方式</string>
+    <string name="s_541">重绘把图片当作 img2img 参考图：会再次消耗 prompt，构图也可能偏移。原生高分辨率修复在 stable-diffusion.cpp 内部完成：先放大 latent 再做第二轮降噪，构图保持不变，也不额外消耗 prompt token。</string>
+    <string name="s_542">放大器</string>
+    <string name="s_543">潜空间放大最省算力。Lanczos 会先解码成像素（最清晰，也最慢）。</string>
 </resources>

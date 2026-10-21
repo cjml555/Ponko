@@ -111,6 +111,13 @@ object DrawCore {
         sampler: SdCppEngine.Sampler? = null,
         scheduler: SdCppEngine.Scheduler? = null,
         onStep: ((Int, Int) -> Unit)? = null,
+        // ---- 原生 hires fix（sd.cpp 内部实现）----
+        /** 放大倍数（2 = 2×）。0 或 <=1 表示不放大。 */
+        hiresScale: Float = 0f,
+        /** 第二轮降噪强度（0.05–0.99）。 */
+        hiresDenoise: Float = 0.7f,
+        /** 放大器。 */
+        hiresUpscaler: SdCppEngine.HiresUpscaler = SdCppEngine.HiresUpscaler.LATENT,
     ): List<Result> {
         if (!lock.tryLock()) throw IllegalStateException("绘图引擎正忙")
         busy = true
@@ -125,6 +132,11 @@ object DrawCore {
             val ht = (height ?: p.height).let { (it / 64) * 64 }.coerceIn(64, 2048)
             val st = (steps ?: p.steps).coerceIn(1, 150)
             val cf = (cfg ?: p.cfg).coerceIn(1f, 30f)
+
+            // 原生 hires fix：目标尺寸 = 基础尺寸 × hiresScale（对齐到 64 的倍数）
+            val useHires = hiresScale > 1.01f
+            val targetW = if (useHires) ((w * hiresScale).toInt() / 64 * 64).coerceIn(64, 2048) else w
+            val targetH = if (useHires) ((ht * hiresScale).toInt() / 64 * 64).coerceIn(64, 2048) else ht
 
             val out = ArrayList<Result>(n)
             for (i in 0 until n) {
@@ -146,6 +158,12 @@ object DrawCore {
                         sampler = sampler ?: p.sampler,
                         scheduler = scheduler ?: p.scheduler,
                         cb = { cur, total -> onStep?.invoke(cur, total) },
+                        hiresEnabled = useHires,
+                        hiresTargetWidth = targetW,
+                        hiresTargetHeight = targetH,
+                        hiresSteps = st,
+                        hiresDenoiseStrength = hiresDenoise.coerceIn(0.05f, 0.99f),
+                        hiresUpscaler = hiresUpscaler,
                     )
                 } ?: throw IllegalStateException("生成失败（引擎返回空图）")
                 out.add(Result(bmp, useSeed))

@@ -2,6 +2,7 @@
 package com.yumenode.ai
 
 import android.graphics.Bitmap
+import com.yumenode.ai.draw.SdCppEngine
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
@@ -254,6 +255,21 @@ class ApiServer(
         val negative = if (req.has("negative_prompt")) req.optString("negative_prompt") else null
         val seed0 = if (req.has("seed")) req.optLong("seed") else -1L
 
+        // ---- 原生 hires fix（sd.cpp 内部实现）----
+        // hires_scale: 2 = 出 2× 大的图（latent 放大 + 第二轮降噪）
+        // hires_denoise: 第二轮降噪强度 0.05–0.99
+        // hires_upscaler: "latent" | "lanczos" | "nearest" | ...
+        val hiresScale = if (req.has("hires_scale")) req.optDouble("hires_scale").toFloat() else 0f
+        val hiresDenoise = if (req.has("hires_denoise")) req.optDouble("hires_denoise").toFloat() else 0.7f
+        val hiresUpscaler = when (req.optString("hires_upscaler", "latent").lowercase()) {
+            "lanczos" -> SdCppEngine.HiresUpscaler.LANCZOS
+            "nearest" -> SdCppEngine.HiresUpscaler.NEAREST
+            "latent_bicubic" -> SdCppEngine.HiresUpscaler.LATENT_BICUBIC
+            "latent_antialiased" -> SdCppEngine.HiresUpscaler.LATENT_ANTIALIASED
+            "latent_nearest" -> SdCppEngine.HiresUpscaler.LATENT_NEAREST
+            else -> SdCppEngine.HiresUpscaler.LATENT
+        }
+
         served++
         lastRequest = "#$served draw n=$n · " + prompt.take(40).replace("\n", " ")
 
@@ -261,7 +277,10 @@ class ApiServer(
         try {
             // n 张一起交给 DrawCore（同一次持锁连着出），避免两张之间被界面插队
             val results = runBlocking {
-                DrawCore.generate(prompt, n, seed0, steps, cfg, w, hgt, negative)
+                DrawCore.generate(prompt, n, seed0, steps, cfg, w, hgt, negative,
+                    hiresScale = hiresScale,
+                    hiresDenoise = hiresDenoise,
+                    hiresUpscaler = hiresUpscaler)
             }
             for (r in results) {
                 val baos = java.io.ByteArrayOutputStream()
