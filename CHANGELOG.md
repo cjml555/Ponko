@@ -6,6 +6,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — logica de parametros de dibujo a un objeto puro
+
+- **`DrawParamsLogic`** (`app/src/main/java/com/yumenode/ai/draw/DrawParamsLogic.kt`, 136 lineas)
+  - Los clamps de los parametros estaban **repetidos en tres sitios** dentro
+    de `DrawPage` (generacion, upscale e img2img) con los mismos numeros
+    escritos a mano: `coerceIn(1, 150)` para los pasos, `coerceIn(1f, 30f)`
+    para el CFG, `coerceIn(0f, 2f)` para el peso de la LoRA, el alineado a
+    multiplos de 64 con `coerceIn(64, 2048)`, la fuerza `coerceIn(0.05f, 0.99f)`,
+    el tiling de VAE y los parametros del tagger.
+  - Ahora cada regla vive **una sola vez** en `DrawParamsLogic` y `DrawPage`
+    la usa en los 14 puntos donde estaba duplicada (29 llamadas).
+  - Se extrajo tambien la matematica del hires fix, que no tenia ninguna
+    cobertura: `hiresDenoise()` mapea la fuerza del slider (0.05–0.99) al
+    rango que el hires nativo de sd.cpp usa bien (0.15–0.55), con los limites
+    durs 0.10–0.60.
+  - Sin cambio de comportamiento: los tests fijan los valores actuales.
+
+### Added
+
+- **21 tests JVM para la logica de parametros** (`DrawParamsLogicTest.kt`, 183 lineas):
+  alineado a multiplos de 64 y acotado a 64..2048, defaults de cada parametro,
+  clamps de pasos/CFG/LoRA/fuerza, la fuerza del upscale mapeada desde el
+  progreso de la barra, los tamanos del upscale (2x alineado y acotado) y de la
+  primera ronda del hires (tamaño original), la monotonia y los limites de
+  `hiresDenoise`, y el tiling de VAE y los parametros del tagger.
+
 ### Refactor — extracción del store de model sets de dibujo
 
 - **`ModelSetStore` + `ModelSet` a nivel de archivo** (`app/src/main/java/com/yumenode/ai/draw/ModelSetStore.kt`, 249 líneas)
@@ -48,10 +74,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **45/45** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **66/66** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
-  `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73,190,003 bytes)
+  `DrawParamsLogicTest` 21, `ThreadRecommendationTest` 3; 0 fallos, 0 errores,
+  0 omitidos)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73,192,435 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - Verificación en dispositivo: **pendiente** — no había ningún dispositivo

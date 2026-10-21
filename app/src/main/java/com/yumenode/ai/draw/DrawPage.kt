@@ -302,17 +302,15 @@ class DrawPage(
         val lora = if (useLora) activeLora() else null
         DrawCore.updateParams(
             DrawCore.Params(
-                steps = stepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20,
-                cfg = cfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f,
-                width = (widthEdit.text.toString().toIntOrNull() ?: 512)
-                    .let { (it / 64) * 64 }.coerceIn(64, 2048),
-                height = (heightEdit.text.toString().toIntOrNull() ?: 512)
-                    .let { (it / 64) * 64 }.coerceIn(64, 2048),
+                steps = DrawParamsLogic.steps(stepsEdit.text.toString()),
+                cfg = DrawParamsLogic.cfg(cfgEdit.text.toString()),
+                width = DrawParamsLogic.size(widthEdit.text.toString()),
+                height = DrawParamsLogic.size(heightEdit.text.toString()),
                 negative = negEdit.text.toString(),
                 sampler = pickSampler(lora != null),
                 scheduler = pickScheduler(lora != null),
                 loraPath = lora?.absolutePath,
-                loraScale = loraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f,
+                loraScale = DrawParamsLogic.loraScale(loraScaleEdit.text.toString()),
             )
         )
     }
@@ -1260,8 +1258,8 @@ class DrawPage(
             c.toast(c.getString(R.string.s_214), short = true)
             return
         }
-        val threshold = taggerThresholdEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.35f
-        val topK = taggerTopKEdit.text.toString().toIntOrNull()?.coerceIn(1, 300) ?: 40
+        val threshold = DrawParamsLogic.taggerThreshold(taggerThresholdEdit.text.toString())
+        val topK = DrawParamsLogic.taggerTopK(taggerTopKEdit.text.toString())
         taggerRunBtn.isEnabled = false
         taggerProgressText.visibility = View.VISIBLE
         taggerProgressText.text = c.getString(R.string.s_229)
@@ -1553,8 +1551,8 @@ class DrawPage(
         i2iBitmap = bmp
         i2iPreview.setImageBitmap(bmp)
         i2iPreview.visibility = View.VISIBLE
-        val w = ((bmp.width / 64) * 64).coerceIn(64, 2048)
-        val h = ((bmp.height / 64) * 64).coerceIn(64, 2048)
+        val w = DrawParamsLogic.alignSize(bmp.width)
+        val h = DrawParamsLogic.alignSize(bmp.height)
         i2iWidthEdit.setText(w.toString())
         i2iHeightEdit.setText(h.toString())
         i2iImgHint.text = c.getString(R.string.v_061, bmp.width, bmp.height)
@@ -2328,7 +2326,7 @@ class DrawPage(
      * SeekBar progress 0..94 mapea a 0.05..0.99。
      */
     private fun currentUpscaleStrength(): Float =
-        (upscaleStrengthBar.progress / 100f + 0.05f).coerceIn(0.05f, 0.99f)
+        DrawParamsLogic.upscaleStrength(upscaleStrengthBar.progress)
 
     /** VAE tiling 相关的行只在开关打开时显示 */
     private fun refreshVaeTilingRows() {
@@ -2341,8 +2339,8 @@ class DrawPage(
     /** 读 VAE tiling 的配置（关掉时返回 null，让引擎走整帧解码） */
     private fun vaeTilingParams(): Triple<Boolean, Int, Float>? {
         if (!::vaeTilingCheck.isInitialized || !vaeTilingCheck.isChecked) return null
-        val size = vaeTileSizeEdit.text.toString().toIntOrNull()?.coerceIn(64, 2048) ?: 512
-        val overlap = vaeTileOverlapEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 0.5f) ?: 0.25f
+        val size = DrawParamsLogic.vaeTileSize(vaeTileSizeEdit.text.toString())
+        val overlap = DrawParamsLogic.vaeTileOverlap(vaeTileOverlapEdit.text.toString())
         return Triple(true, size, overlap)
     }
 
@@ -2398,10 +2396,9 @@ class DrawPage(
         onStatus?.invoke(c.getString(R.string.s_525), false)
 
         // 2× 尺寸，夹到 2048（sd.cpp 上限）；步数用当前值，img2img 步数少但要够
-        val w = (src.width * 2).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val hgt = (src.height * 2).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val steps = stepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20
-        val cfg = cfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f
+        val (w, hgt) = DrawParamsLogic.upscaleTargetSize(src.width, src.height)
+        val steps = DrawParamsLogic.steps(stepsEdit.text.toString())
+        val cfg = DrawParamsLogic.cfg(cfgEdit.text.toString())
         val seed = seedEdit.text.toString().toLongOrNull()?.takeIf { it >= 0 } ?: System.currentTimeMillis()
         val strength = currentUpscaleStrength()   // 用户可调：0.05 = 几乎原图, 0.99 = 几乎重画
 
@@ -2417,8 +2414,9 @@ class DrawPage(
             SdCppEngine.HiresUpscaler.LATENT
         }
         // 原生 hires：第一轮尺寸 = 原图尺寸，目标 = 2×
-        val firstW = if (useNativeHires) ((src.width / 64) * 64).coerceIn(64, 2048) else w
-        val firstH = if (useNativeHires) ((src.height / 64) * 64).coerceIn(64, 2048) else hgt
+        val firstPass = if (useNativeHires) DrawParamsLogic.hiresFirstPassSize(src.width, src.height) else null
+        val firstW = firstPass?.first ?: w
+        val firstH = firstPass?.second ?: hgt
         // 原生 hires 的第二轮降噪强度直接用同一个 slider（0.05–0.99）
         // hires 原生用的是 denoising_strength：0 = 完全保留放大后的 latent（只放大不加细节），
         // 1 = 全部重新采样（构图会丢）。slider 的 0.05–0.99 直接传过去太极端，
@@ -2427,7 +2425,7 @@ class DrawPage(
         //   0.35 = 平衡（默认）
         //   0.55 = 明显加细节（可能动构图）
         val hiresDenoise = if (useNativeHires) {
-            (0.15f + (strength - 0.05f) * (0.40f / 0.94f)).coerceIn(0.10f, 0.60f)
+            DrawParamsLogic.hiresDenoise(strength)
         } else 0.7f
         val vaeTiling = vaeTilingParams()
 
@@ -2470,7 +2468,7 @@ class DrawPage(
                 val negative = negEdit.text.toString()
                 val sampler = pickSampler(lora != null)
                 val scheduler = pickScheduler(lora != null)
-                val loraScale = loraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f
+                val loraScale = DrawParamsLogic.loraScale(loraScaleEdit.text.toString())
 
                 val bmp = withContext(Dispatchers.IO) {
                     if (useNativeHires) {
@@ -2591,13 +2589,13 @@ class DrawPage(
         // 绘图接口正在出图时别插队：同一个 native 句柄同时跑两个任务会错乱
         if (DrawCore.busy) throw IllegalStateException(c.getString(R.string.s_428))
         val vaeTiling = vaeTilingParams()
-        val steps = stepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20
-        val cfg = cfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f
+        val steps = DrawParamsLogic.steps(stepsEdit.text.toString())
+        val cfg = DrawParamsLogic.cfg(cfgEdit.text.toString())
         val seed = seedEdit.text.toString().toLongOrNull() ?: -1L
         val useSeed = if (seed < 0) System.currentTimeMillis() else seed
         // 宽高：sd.cpp 要求 64 的倍数，向下取整；夹到 64~2048 防止手滑
-        val w = (widthEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val hgt = (heightEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
+        val w = DrawParamsLogic.size(widthEdit.text.toString())
+        val hgt = DrawParamsLogic.size(heightEdit.text.toString())
         onProgress(0, steps)
         cancelRequested = false
 
@@ -2614,7 +2612,7 @@ class DrawPage(
         val sampler = pickSampler(lora != null)
         val scheduler = pickScheduler(lora != null)
         // LoRA 权重：0 = 不挂，1.0 是标准
-        val loraScale = loraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f
+        val loraScale = DrawParamsLogic.loraScale(loraScaleEdit.text.toString())
 
         // 对话页出图不走界面的 setGenerating，这里手动上报一句：
         // 否则 API 侧不知道界面在出图，会插进来抢同一个 native 句柄
@@ -2787,13 +2785,13 @@ class DrawPage(
         onProgress: (Int, Int) -> Unit = { _, _ -> },
         onPreview: ((Int, Int, Int, ByteArray) -> Unit)? = null,
     ): ImageData {
-        val steps = i2iStepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20
-        val cfg = i2iCfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f
+        val steps = DrawParamsLogic.steps(i2iStepsEdit.text.toString())
+        val cfg = DrawParamsLogic.cfg(i2iCfgEdit.text.toString())
         val seed = i2iSeedEdit.text.toString().toLongOrNull() ?: -1L
         val useSeed = if (seed < 0) System.currentTimeMillis() else seed
-        val w = (i2iWidthEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val hgt = (i2iHeightEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val strength = i2iStrengthEdit.text.toString().toFloatOrNull()?.coerceIn(0.05f, 0.99f) ?: 0.75f
+        val w = DrawParamsLogic.size(i2iWidthEdit.text.toString())
+        val hgt = DrawParamsLogic.size(i2iHeightEdit.text.toString())
+        val strength = DrawParamsLogic.i2iStrength(i2iStrengthEdit.text.toString())
         val vaeTiling = vaeTilingParams()
         onProgress(0, steps)
         cancelRequested = false
@@ -2807,7 +2805,7 @@ class DrawPage(
         val negative = i2iNegEdit.text.toString()
         val sampler = pickI2iSampler(lora != null)
         val scheduler = pickI2iScheduler(lora != null)
-        val loraScale = i2iLoraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f
+        val loraScale = DrawParamsLogic.loraScale(i2iLoraScaleEdit.text.toString())
 
         val bmp = withContext(Dispatchers.IO) {
             val rgb = SdCppEngine.bitmapToRgb888(src)
