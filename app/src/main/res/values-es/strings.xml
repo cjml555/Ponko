@@ -554,4 +554,8 @@
 
     <string name="s_522">LoRA</string>
     <string name="s_523">Modelo destilado: %1$d pasos · CFG 1</string>
+    <string name="s_532">Preset de tamaño</string>
+    <string name="s_533">Personalizado</string>
+    <string name="s_534">Tamaño personalizado (px)</string>
+    <string name="s_535">El ancho y el alto deben ser múltiplos de 64 (se redondean hacia abajo automáticamente). 512x512 es la resolución nativa de SD1.5; 256 es mucho más rápido y va bien para una primera prueba.</string>
 </resources>

@@ -554,4 +554,8 @@
 
     <string name="s_522">LoRA</string>
     <string name="s_523">Distilled model: %1$d steps · CFG 1</string>
+    <string name="s_532">Size preset</string>
+    <string name="s_533">Custom</string>
+    <string name="s_534">Custom size (px)</string>
+    <string name="s_535">Width and height must be multiples of 64 (they are rounded down automatically). 512x512 is the native SD1.5 resolution; 256 is much faster and good for a first try.</string>
 </resources>

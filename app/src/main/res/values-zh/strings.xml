@@ -476,4 +476,8 @@
     <string name="s_451">更完整的说明——功能与用法、已知限制、第三方组件清单与各许可证全文——请见项目仓库中的 README 与 NOTICE。</string>
     <string name="s_452">在 GitHub 上查看 README</string>
     <string name="s_453">在 GitHub 上查看 NOTICE</string>
+    <string name="s_532">尺寸预设</string>
+    <string name="s_533">自定义</string>
+    <string name="s_534">自定义尺寸（像素）</string>
+    <string name="s_535">宽和高必须是 64 的倍数（会自动向下取整）。512x512 是 SD1.5 的原生分辨率；256 更快，适合首次尝试。</string>
 </resources>

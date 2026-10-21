@@ -17,6 +17,7 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -81,6 +82,9 @@ class DrawPage(
         const val DIR_NAME = "draw"
         /** 打标模型/标签表目录：filesDir/tagger */
         const val TAGGER_DIR = "tagger"
+
+        /** 尺寸预设（方形，px）。sd.cpp 要求 64 的倍数，这里全是对齐的。 */
+        private val SIZE_PRESETS = listOf(64, 128, 256, 384, 512)
         private const val REQ_IMAGE = 0x5D02
         private const val REQ_TAGGER_IMAGE = 0x5D03
 
@@ -305,6 +309,14 @@ class DrawPage(
     // 宽 / 高（可自由填，sd.cpp 要求 64 的倍数）
     private lateinit var widthEdit: EditText
     private lateinit var heightEdit: EditText
+    /** 预设尺寸按钮组：点一下就把 width/height 两个输入框填成对应值 */
+    private val sizePresetButtons = mutableListOf<android.widget.Button>()
+    /** 当前选中的预设尺寸（0 = 自定义）；null 表示尺寸跟预设不一致 */
+    private var selectedSizePreset: Int? = null
+    /** 自定义尺寸行：只有选「Personalizado」时才显示 */
+    private var customSizeRow: View? = null
+    /** 程序化改宽高时置 true，免得 watcher 把预设高亮清掉 */
+    private var suppressPresetSync = false
 
     // 采样器 / 调度器（第 0 项 = 自动）
     private lateinit var samplerSpinner: android.widget.Spinner
@@ -513,11 +525,10 @@ class DrawPage(
         val paramCard = card()
         paramCard.addView(title(c.getString(R.string.s_065)))
 
-        // 尺寸：宽 × 高，自由填（sd.cpp 要求 64 的倍数）——从上次的值恢复
+        // 尺寸：预设按钮组（64→512 + Personalizado），选预设直接填宽高
         widthEdit = smallNumber(loadParam(KEY_W, defOf("t2i", "w", "512")))
         heightEdit = smallNumber(loadParam(KEY_H, defOf("t2i", "h", "512")))
-        paramCard.addView(whRow(c.getString(R.string.s_070),
-            c.getString(R.string.s_068), widthEdit, heightEdit))
+        paramCard.addView(sizePresetRow())
 
         // 采样器 / 调度器
         samplerSpinner = choiceSpinner(
@@ -2640,6 +2651,124 @@ class DrawPage(
     }
 
     /** 宽 × 高 输入行 */
+    /**
+     * 尺寸预设按钮组：64/128/256/384/512 + 「Personalizado」。
+     *
+     * 选预设 → 直接把 width/height 填好；选 Personalizado → 显示自定义输入行。
+     * 用户手改宽高后自动切回「Personalizado」（避免按钮状态和实际值对不上）。
+     */
+    private fun sizePresetRow(): View {
+        val wrap = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        wrap.addView(smallLabel(c.getString(R.string.s_532)))
+
+        val presets = SIZE_PRESETS
+        val row = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        sizePresetButtons.clear()
+        presets.forEachIndexed { idx, px ->
+            val b = android.widget.Button(c).apply {
+                text = "$px"
+                textSize = 12f
+                setTextColor(textColor)
+                isAllCaps = false
+                setPadding(c.dp(4), c.dp(2), c.dp(4), c.dp(2))
+                setOnClickListener {
+                    applySizePreset(idx)
+                }
+            }
+            sizePresetButtons.add(b)
+            row.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = c.dp(2)
+                marginEnd = c.dp(2)
+            })
+        }
+        // 「Personalizado」按钮：放进同一行，权重稍大（文字更长）
+        val customBtn = android.widget.Button(c).apply {
+            text = c.getString(R.string.s_533)
+            textSize = 11f
+            setTextColor(textColor)
+            isAllCaps = false
+            setPadding(c.dp(4), c.dp(2), c.dp(4), c.dp(2))
+            setOnClickListener { applySizePreset(-1) }
+        }
+        // 放最后，方便 applySizePreset 用 index == -1 表示「自定义」并统一高亮
+        sizePresetButtons.add(customBtn)
+        row.addView(customBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.4f).apply {
+            marginStart = c.dp(4)
+        })
+        wrap.addView(row, c.matchWrap(top = 4))
+
+        // 自定义宽高输入行（默认隐藏，选「Personalizado」才出现）
+        val customRow = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        customRow.addView(smallLabel(c.getString(R.string.s_534)))
+        val fields = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+        fields.addView(widthEdit, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        fields.addView(TextView(c).apply {
+            text = " × "
+            textSize = 14f
+            setTextColor(textColor)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        fields.addView(heightEdit, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        customRow.addView(fields, c.matchWrap(top = 4))
+        customRow.addView(TextView(c).apply {
+            text = c.getString(R.string.s_535)
+            textSize = 10.5f
+            setTextColor(subText)
+            setPadding(0, c.dp(3), 0, 0)
+        })
+        customRow.visibility = View.GONE
+        customSizeRow = customRow
+        wrap.addView(customRow, c.matchWrap(top = 6))
+
+        // 初始状态：按当前宽高判断落在哪个预设上
+        val cur = widthEdit.text.toString().toIntOrNull()
+        val idx = presets.indexOf(cur).takeIf { it >= 0 && heightEdit.text.toString().toIntOrNull() == cur }
+        applySizePreset(idx ?: -1, updateFields = false)
+
+        // 用户手改宽高 → 自动切到「Personalizado」，并显示输入行
+        // （否则按钮高亮和实际值会对不上，误导用户）
+        val watcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (suppressPresetSync) return
+                val w = widthEdit.text.toString().toIntOrNull()
+                val h = heightEdit.text.toString().toIntOrNull()
+                val match = presets.indexOf(w).takeIf { it >= 0 && h == w }
+                if (match == null && selectedSizePreset != null) {
+                    applySizePreset(-1, updateFields = false)
+                }
+            }
+        }
+        widthEdit.addTextChangedListener(watcher)
+        heightEdit.addTextChangedListener(watcher)
+
+        return wrap
+    }
+
+    /** 高亮选中的预设按钮，并显示/隐藏自定义输入行 */
+    private fun applySizePreset(index: Int, updateFields: Boolean = true) {
+        if (updateFields && index >= 0) {
+            val px = SIZE_PRESETS.getOrNull(index) ?: return
+            suppressPresetSync = true
+            widthEdit.setText(px.toString())
+            heightEdit.setText(px.toString())
+            suppressPresetSync = false
+        }
+        selectedSizePreset = if (index >= 0) index else null
+        sizePresetButtons.forEachIndexed { i, b ->
+            // 最后一个是「Personalizado」：index == -1 时高亮它
+            val isCustom = i == sizePresetButtons.size - 1
+            val on = if (isCustom) index == -1 else i == index
+            b.setBackgroundColor(if (on) pal.primary else pal.fieldBg)
+            b.setTextColor(if (on) pal.bg else textColor)
+        }
+        customSizeRow?.visibility = if (index == -1) View.VISIBLE else View.GONE
+    }
+
     private fun whRow(label: String, hint: String, wEdit: EditText, hEdit: EditText): View {
         val wrap = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         wrap.addView(smallLabel(label))
