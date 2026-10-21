@@ -6,9 +6,13 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
-plugins {
-    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-}
+// El resolver de foojay se quito junto con gradle/gradle-daemon-jvm.properties:
+// fijaba el daemon en JetBrains JDK 25, que en CI habia que descargar de
+// foojay.io en cada run (el HEAD devolvia 400 Bad Request de forma
+// intermitente y el build moria antes de compilar). El proyecto compila con
+// Java 17 y el CI ya instala el JDK con setup-java, asi que no hace falta
+// descargar toolchains.
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
