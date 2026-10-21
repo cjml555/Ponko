@@ -66,6 +66,21 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Serves the on-device language model over a local OpenAI-compatible HTTP API" />
         </service>
+
+        <!--
+            Broadcast para encender/apagar el servidor de la API sin abrir la app.
+            Sirve para automatizar pruebas (adb shell am broadcast -a com.yumenode.ai.API_START).
+            Sin permiso: solo hace falta que el server escuche en localhost, y el
+            API key (que es opcional) es la que protege el acceso real.
+        -->
+        <receiver
+            android:name=".ApiService$BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.yumenode.ai.API_START" />
+                <action android:name="com.yumenode.ai.API_STOP" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

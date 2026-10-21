@@ -150,6 +150,16 @@ class ApiService : Service() {
             ctx.startService(Intent(ctx, ApiService::class.java).setAction(ACTION_STOP))
         }
 
+        /**
+         * Broadcast para encender/apagar el servidor desde fuera de la app.
+         *
+         * Sirve para automatizar pruebas: `adb shell am broadcast -a com.yumenode.ai.API_START`
+         * levanta el servidor sin tener que tocar la pantalla (el boton "Iniciar servicio"
+         * vive en una pestana que hay que abrir a mano).
+         */
+        const val BROADCAST_START = "com.yumenode.ai.API_START"
+        const val BROADCAST_STOP = "com.yumenode.ai.API_STOP"
+
         /** 本机在局域网里的 IPv4（拿不到就返回 127.0.0.1） */
         fun localIp(): String = try {
             NetworkInterface.getNetworkInterfaces().toList()
@@ -196,6 +206,23 @@ class ApiService : Service() {
     override fun onDestroy() {
         shutdownAll()
         super.onDestroy()
+    }
+
+    /**
+     * Recibe los broadcasts de arranque/parada. Vive en el propio Service para
+     * que android:exported="true" no exponga nada mas de la app.
+     */
+    class BootReceiver : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+            when (intent.action) {
+                // startService (no foreground): desde un receiver en background,
+                // startForegroundService esta restringido en Android 12+.
+                // El Service se convierte en foreground en cuanto arranca.
+                BROADCAST_START -> context.startService(
+                    Intent(context, ApiService::class.java).setAction(ACTION_START))
+                BROADCAST_STOP -> stopAll(context)
+            }
+        }
     }
 
     // ==================== 启停对齐 ====================

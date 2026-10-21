@@ -213,6 +213,8 @@ class DrawPage(
         private const val KEY_VAE_TILE_SIZE = "vaeTileSize"
         /** VAE tiling 的块重叠（0–0.5） */
         private const val KEY_VAE_TILE_OVERLAP = "vaeTileOverlap"
+        /** TAESD activo（ruta absoluta del fichero）， global a todos los modelos */
+        private const val KEY_TAESD_PATH = "taesdPath"
         private const val KEY_SAMPLER = "drawSampler"
         private const val KEY_SCHEDULER = "drawScheduler"
 
@@ -1851,11 +1853,29 @@ class DrawPage(
      * Devuelve true si se pudo asignar.
      */
     fun assignTaesdToActiveSet(): Boolean {
-        val s = activeSetOrSelected() ?: return false
         val f = taesdFile() ?: return false
-        s.files["taesd"] = f
-        writeSetJson(s)
+        // La ruta se guarda como preferencia global (no en el set): los sets "legacy"
+        // (archivos sueltos) no tienen directorio donde escribir el JSON, y el
+        // TAESD sirve igual para cualquier modelo SD1.x/SD2.x.
+        prefs().edit().putString(KEY_TAESD_PATH, f.absolutePath).apply()
+        // Y ademas se apunta en el set activo, si es uno con directorio (multi-archivo).
+        val s = activeSetOrSelected()
+        if (s != null && s.dir != null) {
+            s.files["taesd"] = f
+            writeSetJson(s)
+        }
         return true
+    }
+
+    /** Ruta del TAESD activa (preferencia global) o null. */
+    fun activeTaesdPath(): String? {
+        val pref = prefs().getString(KEY_TAESD_PATH, null)
+        if (!pref.isNullOrBlank() && File(pref).exists()) return pref
+        // El set activo puede tener su propio taesd (multi-archivo).
+        val s = activeSetOrSelected()
+        val inSet = s?.files?.get("taesd")
+        if (inSet != null && inSet.exists()) return inSet.absolutePath
+        return null
     }
 
     /** 路径 del TAESD descargado, o null si no está. */
@@ -2115,6 +2135,11 @@ class DrawPage(
         // 槽位表 → sd.cpp 的路径参数
         val slots = LinkedHashMap<String, String>()
         set.files.forEach { (k, f) -> slots[k] = f.absolutePath }
+        // TAESD global: si esta descargado y el set no trae el suyo, se anade aqui.
+        // Asi sirve para los modelos sueltos ("legacy"), que no tienen set donde guardar slots.
+        activeTaesdPath()?.let { p ->
+            if (!slots.containsKey("taesd")) slots["taesd"] = p
+        }
         val missing = slotMissingIds(set).map { c.getString(slotLabelRes(it)) }
         if (missing.isNotEmpty()) {
             val msg = c.getString(R.string.s_363, missing.joinToString("、"))
