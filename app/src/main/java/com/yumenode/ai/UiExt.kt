@@ -42,8 +42,8 @@ fun Context.matchWrap(top: Int = 0) = LinearLayout.LayoutParams(
     LinearLayout.LayoutParams.WRAP_CONTENT
 ).apply { topMargin = dp(top) }
 
-/** WRAP_CONTENT × WRAP_CONTENT */
-fun Context.wrapWrap() = LinearLayout.LayoutParams(
+/** WRAP_CONTENT × WRAP_CONTENT, con margen izquierdo opcional (dp) */
+fun Context.wrapWrap(leftMargin: Int = 0) = LinearLayout.LayoutParams(
     LinearLayout.LayoutParams.WRAP_CONTENT,
     LinearLayout.LayoutParams.WRAP_CONTENT
-)
+).apply { this.leftMargin = dp(leftMargin) }

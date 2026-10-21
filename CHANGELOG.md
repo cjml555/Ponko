@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactor — unificar los LayoutParams de la UI
+
+- **`UiExt.matchWrap()` / `UiExt.wrapWrap()`** como fuente unica.
+  `ApiBlockBuilder`, `ChatImageHandler` y `ModelsPage` tenian cada uno su
+  copia local de los `LayoutParams` (con firmas distintas: sin parametros,
+  con `topMargin`, con `leftMargin`). Ahora las tres delegan en las
+  extensiones de `Context` de `UiExt.kt`, que ya eran la fuente comun.
+  `UiExt.wrapWrap()` acepta `leftMargin` para cubrir la variante de
+  `ModelsPage` sin cambiar sus 13 call sites.
+- `UiHelpers.hintTextView()` pasa a ser privado: solo lo usa `numField()`.
+
 ### Refactor — una sola aritmetica de dp a px
 
 - **`UiScale`** (`app/src/main/java/com/yumenode/ai/UiScale.kt`)
@@ -236,7 +247,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `TaggerSessionTest` 10, `TaggerReadyEquivalenceTest` 2,
   `DrawFileImporterTest` 5, `ContextBudgetTest` 12, `UiScaleTest` 12,
   `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73300275 bytes)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73300631 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - **Verificación en dispositivo** (Motorola Edge 50 Fusion, Android 16,
@@ -273,7 +284,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ajustes en el Edge 50 Fusion (densidad 400dpi). Todo renderiza sin
   solapamientos ni textos cortados; en la captura de la pagina de dibujo los
   presets de tamaño (64/128/256/384/512/Personalizado) quedan alineados y los
-  margenes son identicos a antes del refactor.
+  margenes son identicos a antes del refactor. La captura de la sub-pestaña
+  API (que usa `ApiBlockBuilder`) sale tambien sin deformaciones: campo de
+  puerto, botones «Nueva clave» / «Borrar» alineados y «Iniciar servicio» a
+  ancho completo.
 
 ### Refactor — page extraction (incremental monolith reduction)
 

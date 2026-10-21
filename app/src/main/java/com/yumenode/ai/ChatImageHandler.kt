@@ -189,10 +189,9 @@ class ChatImageHandler(
     private fun dp(d: Int): Int =
         UiScale.dpToPxRounded(d, ctx.resources.displayMetrics.density)
 
-    private fun matchWrap() =
-        LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT)
+    /** MATCH_PARENT x WRAP_CONTENT (helper de Context, reutilizado aqui). */
+    private fun matchWrap() = with(ctx) { matchWrap() }
+
 }
 
 /** AI reply card — extraída de MainActivity como clase top-level para compartirla. */
