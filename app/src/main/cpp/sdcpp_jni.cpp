@@ -256,7 +256,8 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
         jobject cb, jobject pcb,
         jbyteArray initData, jint initWidth, jint initHeight, jfloat strength,
         jboolean hiresEnabled, jint hiresTargetWidth, jint hiresTargetHeight,
-        jint hiresSteps, jfloat hiresDenoiseStrength, jint hiresUpscaler) {
+        jint hiresSteps, jfloat hiresDenoiseStrength, jint hiresUpscaler,
+        jboolean vaeTilingEnabled, jint vaeTileSize, jfloat vaeTileOverlap) {
     SdHandle* h = reinterpret_cast<SdHandle*>(handle);
     if (h == nullptr || h->ctx == nullptr) return nullptr;
 
@@ -351,6 +352,28 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeGenerate(
     g.sample_params.guidance.txt_cfg = cfg;
     g.sample_params.sample_method = static_cast<enum sample_method_t>(sampleMethod);
     g.sample_params.scheduler     = static_cast<enum scheduler_t>(scheduler);
+
+    // ---- VAE tiling：分块编解码，避免大图一次性解码爆内存 ----
+    // 手机上 1024x1024 的整帧解码要吃掉几百 MB；分块后峰值内存只跟 tile 有关。
+    // rel_size 语义（sd/src/model/vae/vae.hpp get_tile_size）：
+    //   <= 0  -> 用 tile_size_x/y 的绝对像素数
+    //   <= 1  -> latent 尺寸的分数（0.25 = 25%）
+    //   > 1   -> 该方向上的 tile 数量
+    if (vaeTilingEnabled == JNI_TRUE) {
+        g.vae_tiling_params.enabled         = true;
+        g.vae_tiling_params.temporal_tiling  = false;
+        g.vae_tiling_params.target_overlap   = vaeTileOverlap;
+        g.vae_tiling_params.extra_tiling_args = nullptr;
+        // tile_size en pixeles de la imagen; sd.cpp lo reduce a latent (÷8).
+        int t = vaeTileSize > 0 ? vaeTileSize : 512;
+        if (t < 64) t = 64;
+        if (t > 2048) t = 2048;
+        g.vae_tiling_params.tile_size_x = t;
+        g.vae_tiling_params.tile_size_y = t;
+        g.vae_tiling_params.rel_size_x  = 0.f;
+        g.vae_tiling_params.rel_size_y  = 0.f;
+        LOGI("vae tiling enabled: tile=%dx%d, overlap=%.2f", t, t, vaeTileOverlap);
+    }
 
     // ---- 原生 hires fix（sd.cpp 内部实现）----
     // 与 img2img 重绘不同：这里第一轮照常按 width/height 出图，然后 sd.cpp 把 latent

@@ -118,6 +118,13 @@ object DrawCore {
         hiresDenoise: Float = 0.7f,
         /** 放大器。 */
         hiresUpscaler: SdCppEngine.HiresUpscaler = SdCppEngine.HiresUpscaler.LATENT,
+        // ---- VAE tiling（分块编解码，省内存）----
+        /** 是否启用 VAE 分块。大图在手机上会吃掉几百 MB，分块后峰值只跟 tile 有关。 */
+        vaeTiling: Boolean = false,
+        /** tile 大小（像素）。 */
+        vaeTileSize: Int = 512,
+        /** tile 之间的重叠（0–0.5），避免接缝。 */
+        vaeTileOverlap: Float = 0.25f,
     ): List<Result> {
         if (!lock.tryLock()) throw IllegalStateException("绘图引擎正忙")
         busy = true
@@ -164,6 +171,9 @@ object DrawCore {
                         hiresSteps = st,
                         hiresDenoiseStrength = hiresDenoise.coerceIn(0.05f, 0.99f),
                         hiresUpscaler = hiresUpscaler,
+                        vaeTilingEnabled = vaeTiling,
+                        vaeTileSize = vaeTileSize,
+                        vaeTileOverlap = vaeTileOverlap.coerceIn(0f, 0.5f),
                     )
                 } ?: throw IllegalStateException("生成失败（引擎返回空图）")
                 out.add(Result(bmp, useSeed))

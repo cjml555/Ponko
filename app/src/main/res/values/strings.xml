@@ -574,4 +574,8 @@
     <string name="s_541">Redraw uses the image as an img2img reference: the prompt is re-consumed and the composition may shift. Native hi-res fix runs inside stable-diffusion.cpp: it upscales the latent and denoises a second time, so the composition stays put and no extra prompt tokens are spent.</string>
     <string name="s_542">Upscaler</string>
     <string name="s_543">Latent upscaling runs in latent space (cheapest). Lanczos decodes to pixels first (sharpest, slowest).</string>
+    <string name="s_544">VAE tiling</string>
+    <string name="s_545">Decode the image in blocks instead of all at once. Large images need hundreds of MB to decode in one piece; tiling keeps the memory peak tied to the block size instead. Slightly slower, but it lets you generate big images on a phone with little RAM.</string>
+    <string name="s_546">Block size (px)</string>
+    <string name="s_547">Overlap between blocks (0–0.5). Higher values reduce visible seams but need more memory.</string>
 </resources>

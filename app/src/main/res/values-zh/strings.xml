@@ -496,4 +496,8 @@
     <string name="s_541">重绘把图片当作 img2img 参考图：会再次消耗 prompt，构图也可能偏移。原生高分辨率修复在 stable-diffusion.cpp 内部完成：先放大 latent 再做第二轮降噪，构图保持不变，也不额外消耗 prompt token。</string>
     <string name="s_542">放大器</string>
     <string name="s_543">潜空间放大最省算力。Lanczos 会先解码成像素（最清晰，也最慢）。</string>
+    <string name="s_544">VAE 分块</string>
+    <string name="s_545">分块解码图像，而不是一次性解码。大图一次性解码需要几百 MB 内存；分块后内存峰值只与块大小相关。稍慢一点，但让内存不多的手机也能出大图。</string>
+    <string name="s_546">块大小（像素）</string>
+    <string name="s_547">块之间的重叠（0–0.5）。数值越大接缝越不明显，但需要更多内存。</string>
 </resources>

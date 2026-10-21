@@ -119,6 +119,9 @@ object SdCppEngine {
         hiresSteps: Int,
         hiresDenoiseStrength: Float,
         hiresUpscaler: Int,
+        vaeTilingEnabled: Boolean,
+        vaeTileSize: Int,
+        vaeTileOverlap: Float,
     ): IntArray?
 
     /** 原生 hires fix 的放大器（对应 sd.cpp 的 sd_hires_upscaler_t）。 */
@@ -244,6 +247,10 @@ object SdCppEngine {
         hiresSteps: Int = 0,
         hiresDenoiseStrength: Float = 0.7f,
         hiresUpscaler: HiresUpscaler = HiresUpscaler.LATENT,
+        // ---- VAE tiling（分块编解码，省内存）----
+        vaeTilingEnabled: Boolean = false,
+        vaeTileSize: Int = 512,
+        vaeTileOverlap: Float = 0.25f,
     ): Bitmap? {
         val effectiveSeed = if (seed < 0) (System.currentTimeMillis() % 1_000_000_000L) else seed
         val useInit = initImage != null && initImage.isNotEmpty() && initWidth > 0 && initHeight > 0
@@ -262,6 +269,9 @@ object SdCppEngine {
             if (useHires) hiresSteps else 0,
             if (useHires) hiresDenoiseStrength else 0.7f,
             if (useHires) hiresUpscaler.code else 0,
+            vaeTilingEnabled,
+            vaeTileSize,
+            vaeTileOverlap,
         ) ?: return null
         if (px.isEmpty()) return null
         // hires 时出的是目标尺寸，数组按目标尺寸排布

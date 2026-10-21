@@ -574,4 +574,8 @@
     <string name="s_541">Redibujar usa la imagen como referencia img2img: vuelve a consumir el prompt y la composición puede moverse. El hi-res nativo se ejecuta dentro de stable-diffusion.cpp: amplía el latent y hace una segunda pasada de denoise, así que la composición se queda fija y no se gastan tokens extra del prompt.</string>
     <string name="s_542">Ampliador</string>
     <string name="s_543">La ampliación en espacio latent es la más barata. Lanczos decifica a píxeles primero (nítido, pero lento).</string>
+    <string name="s_544">VAE tiling</string>
+    <string name="s_545">Decodifica la imagen por bloques en vez de toda de una vez. Las imágenes grandes necesitan cientos de MB para decodificar de una sola vez; el tiling mantiene el pico de memoria ligado al tamaño del bloque. Un poco más lento, pero permite generar imágenes grandes en un teléfono con poca RAM.</string>
+    <string name="s_546">Tamaño del bloque (px)</string>
+    <string name="s_547">Solapamiento entre bloques (0–0.5). Más valor reduce las costuras visibles pero necesita más memoria.</string>
 </resources>

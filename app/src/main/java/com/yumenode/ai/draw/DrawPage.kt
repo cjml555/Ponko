@@ -194,6 +194,12 @@ class DrawPage(
         private const val KEY_UPSCALE_MODE = "upscaleMode"
         /** 原生 hires fix 的放大器索引 */
         private const val KEY_UPSCALE_UPSCALER = "upscaleUpscaler"
+        /** VAE tiling（分块编解码）开关 */
+        private const val KEY_VAE_TILING = "vaeTiling"
+        /** VAE tiling 的块大小（px） */
+        private const val KEY_VAE_TILE_SIZE = "vaeTileSize"
+        /** VAE tiling 的块重叠（0–0.5） */
+        private const val KEY_VAE_TILE_OVERLAP = "vaeTileOverlap"
         private const val KEY_SAMPLER = "drawSampler"
         private const val KEY_SCHEDULER = "drawScheduler"
 
@@ -352,6 +358,12 @@ class DrawPage(
     private lateinit var upscaleModeSpinner: android.widget.Spinner
     /** 原生 hires fix 用的放大器 */
     private lateinit var upscaleUpscalerSpinner: android.widget.Spinner
+    /** VAE tiling 开关 */
+    private lateinit var vaeTilingCheck: CheckBox
+    /** VAE tiling 的块大小 */
+    private lateinit var vaeTileSizeEdit: EditText
+    /** VAE tiling 的块重叠 */
+    private lateinit var vaeTileOverlapEdit: EditText
     private lateinit var saveBtn: Button
     private lateinit var upscaleBtn: Button
     private lateinit var upscaleStrengthBar: SeekBar
@@ -600,6 +612,28 @@ class DrawPage(
         loraScaleEdit = smallNumber(loadParam(KEY_LORA_SCALE, defOf("t2i", "loraScale", "1.0")))
         bindParam(loraScaleEdit, KEY_LORA_SCALE)
         paramCard.addView(paramRow(c.getString(R.string.s_024), loraScaleEdit, c.getString(R.string.s_037)))
+        // ---- VAE tiling：分块编解码（大图省内存）----
+        vaeTilingCheck = CheckBox(c).apply {
+            text = c.getString(R.string.s_544)
+            textSize = 13f
+            setTextColor(textColor)
+            isChecked = loadParam(KEY_VAE_TILING, "0") == "1"
+            setPadding(0, c.dp(10), 0, 0)
+            setOnCheckedChangeListener { _, checked ->
+                prefs().edit().putString(KEY_VAE_TILING, if (checked) "1" else "0").apply()
+                refreshVaeTilingRows()
+            }
+        }
+        paramCard.addView(vaeTilingCheck)
+        vaeTileSizeEdit = smallNumber(loadParam(KEY_VAE_TILE_SIZE, "512"))
+        vaeTileOverlapEdit = smallNumber(loadParam(KEY_VAE_TILE_OVERLAP, "0.25"))
+        bindParam(vaeTileSizeEdit, KEY_VAE_TILE_SIZE)
+        bindParam(vaeTileOverlapEdit, KEY_VAE_TILE_OVERLAP)
+        val vaeTileSizeRow = paramRow(c.getString(R.string.s_546), vaeTileSizeEdit, c.getString(R.string.s_545))
+        val vaeTileOverlapRow = paramRow(c.getString(R.string.s_547), vaeTileOverlapEdit, "")
+        paramCard.addView(vaeTileSizeRow)
+        paramCard.addView(vaeTileOverlapRow)
+
         loraHint = TextView(c).apply {
             textSize = 11f
             setTextColor(subText)
@@ -901,6 +935,7 @@ class DrawPage(
 
         refreshLoraHint()
         refreshQuantText()
+        refreshVaeTilingRows()
         switchMode(0)
         switchPane(toResult = false)
         switchResultPage(0)
@@ -2309,6 +2344,22 @@ class DrawPage(
     private fun currentUpscaleStrength(): Float =
         (upscaleStrengthBar.progress / 100f + 0.05f).coerceIn(0.05f, 0.99f)
 
+    /** VAE tiling 相关的行只在开关打开时显示 */
+    private fun refreshVaeTilingRows() {
+        if (!::vaeTileSizeEdit.isInitialized) return
+        val on = vaeTilingCheck.isChecked
+        vaeTileSizeEdit.parent?.let { (it as? View)?.visibility = if (on) View.VISIBLE else View.GONE }
+        vaeTileOverlapEdit.parent?.let { (it as? View)?.visibility = if (on) View.VISIBLE else View.GONE }
+    }
+
+    /** 读 VAE tiling 的配置（关掉时返回 null，让引擎走整帧解码） */
+    private fun vaeTilingParams(): Triple<Boolean, Int, Float>? {
+        if (!::vaeTilingCheck.isInitialized || !vaeTilingCheck.isChecked) return null
+        val size = vaeTileSizeEdit.text.toString().toIntOrNull()?.coerceIn(64, 2048) ?: 512
+        val overlap = vaeTileOverlapEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 0.5f) ?: 0.25f
+        return Triple(true, size, overlap)
+    }
+
     /** 刷新「放大强度」旁边的实时数值 */
     private fun updateUpscaleStrengthLabel() {
         if (!::upscaleStrengthText.isInitialized || !::upscaleStrengthBar.isInitialized) return
@@ -2392,6 +2443,7 @@ class DrawPage(
         val hiresDenoise = if (useNativeHires) {
             (0.15f + (strength - 0.05f) * (0.40f / 0.94f)).coerceIn(0.10f, 0.60f)
         } else 0.7f
+        val vaeTiling = vaeTilingParams()
 
         scope.launch {
             val ticker = launch {
@@ -2458,6 +2510,9 @@ class DrawPage(
                             hiresSteps = steps,
                             hiresDenoiseStrength = hiresDenoise,
                             hiresUpscaler = upscaler,
+                            vaeTilingEnabled = vaeTiling?.first ?: false,
+                            vaeTileSize = vaeTiling?.second ?: 512,
+                            vaeTileOverlap = vaeTiling?.third ?: 0.25f,
                         )
                     } else {
                         // 图生图重绘：原图当参考图，按 2× 尺寸重画
@@ -2480,6 +2535,9 @@ class DrawPage(
                             initWidth = src.width,
                             initHeight = src.height,
                             strength = strength,
+                            vaeTilingEnabled = vaeTiling?.first ?: false,
+                            vaeTileSize = vaeTiling?.second ?: 512,
+                            vaeTileOverlap = vaeTiling?.third ?: 0.25f,
                         )
                     }
                 } ?: throw IllegalStateException(c.getString(R.string.s_147))
@@ -2546,6 +2604,7 @@ class DrawPage(
     ): ImageData {
         // 绘图接口正在出图时别插队：同一个 native 句柄同时跑两个任务会错乱
         if (DrawCore.busy) throw IllegalStateException(c.getString(R.string.s_428))
+        val vaeTiling = vaeTilingParams()
         val steps = stepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20
         val cfg = cfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f
         val seed = seedEdit.text.toString().toLongOrNull() ?: -1L
@@ -2595,6 +2654,9 @@ class DrawPage(
                     onPreview = onPreview?.let { f ->
                         SdCppEngine.PreviewCallback { st, w, h, rgb -> f(st, w, h, rgb) }
                     },
+                    vaeTilingEnabled = vaeTiling?.first ?: false,
+                    vaeTileSize = vaeTiling?.second ?: 512,
+                    vaeTileOverlap = vaeTiling?.third ?: 0.25f,
                 )
             } ?: throw IllegalStateException(c.getString(R.string.s_147))
             onProgress(steps, steps)
@@ -2746,6 +2808,7 @@ class DrawPage(
         val w = (i2iWidthEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
         val hgt = (i2iHeightEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
         val strength = i2iStrengthEdit.text.toString().toFloatOrNull()?.coerceIn(0.05f, 0.99f) ?: 0.75f
+        val vaeTiling = vaeTilingParams()
         onProgress(0, steps)
         cancelRequested = false
 
@@ -2783,6 +2846,9 @@ class DrawPage(
                 initWidth = src.width,
                 initHeight = src.height,
                 strength = strength,
+                vaeTilingEnabled = vaeTiling?.first ?: false,
+                vaeTileSize = vaeTiling?.second ?: 512,
+                vaeTileOverlap = vaeTiling?.third ?: 0.25f,
             )
         } ?: throw IllegalStateException(c.getString(R.string.s_147))
         onProgress(steps, steps)

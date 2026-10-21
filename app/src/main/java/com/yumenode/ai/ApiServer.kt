@@ -261,6 +261,12 @@ class ApiServer(
         // hires_upscaler: "latent" | "lanczos" | "nearest" | ...
         val hiresScale = if (req.has("hires_scale")) req.optDouble("hires_scale").toFloat() else 0f
         val hiresDenoise = if (req.has("hires_denoise")) req.optDouble("hires_denoise").toFloat() else 0.7f
+        // ---- VAE tiling（分块编解码，省内存）----
+        // vae_tiling: true/false · vae_tile_size: px · vae_tile_overlap: 0–0.5
+        val vaeTiling = req.optBoolean("vae_tiling", false)
+        val vaeTileSize = req.optInt("vae_tile_size", 512).coerceIn(64, 2048)
+        val vaeTileOverlap = req.optDouble("vae_tile_overlap", 0.25).toFloat().coerceIn(0f, 0.5f)
+
         val hiresUpscaler = when (req.optString("hires_upscaler", "latent").lowercase()) {
             "lanczos" -> SdCppEngine.HiresUpscaler.LANCZOS
             "nearest" -> SdCppEngine.HiresUpscaler.NEAREST
@@ -280,7 +286,10 @@ class ApiServer(
                 DrawCore.generate(prompt, n, seed0, steps, cfg, w, hgt, negative,
                     hiresScale = hiresScale,
                     hiresDenoise = hiresDenoise,
-                    hiresUpscaler = hiresUpscaler)
+                    hiresUpscaler = hiresUpscaler,
+                    vaeTiling = vaeTiling,
+                    vaeTileSize = vaeTileSize,
+                    vaeTileOverlap = vaeTileOverlap)
             }
             for (r in results) {
                 val baos = java.io.ByteArrayOutputStream()
