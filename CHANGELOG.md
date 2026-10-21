@@ -59,6 +59,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Test de equivalencia del tagger** (`TaggerReadyEquivalenceTest.kt`, 125 lineas):
+  reimplementa la logica ORIGINAL (la comparacion que estaba dentro de
+  `DrawPage` antes del refactor) y la compara con la nueva en una matriz de
+  128 combinaciones de estado (cargado/no cargado, modelo y tabla coincidentes
+  o no, backend GPU y CPU). Un segundo test comprueba que la forma invertida
+  de la funcion habria recarga un tagger que ya estaba listo: es el fallo
+  silencioso que casi se cuela al cablear los dos call sites, y que ni el
+  compilador ni los tests de la funcion aislada detectan.
+
 - **18 tests JVM para el tagger** (`TaggerStoreTest.kt`): 8 del catalogo
   (solo se listan `.onnx` / `.csv`, ordenados por nombre; la seleccion
   guardada por **nombre** y su caida al primero cuando el fichero ya no
@@ -123,12 +132,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **97/97** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **99/99** tests pasan
   (`ChatSendLogicTest` 15, `DistilledPresetsTest` 6, `ModelSetStoreTest` 21,
   `DrawParamsLogicTest` 21, `LoraStoreTest` 13, `TaggerStoreTest` 8,
-  `TaggerSessionTest` 10, `ThreadRecommendationTest` 3; 0 fallos, 0 errores,
-  0 omitidos)
-- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73,201,435 bytes)
+  `TaggerSessionTest` 10, `TaggerReadyEquivalenceTest` 2,
+  `ThreadRecommendationTest` 3; 0 fallos, 0 errores, 0 omitidos)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL, `app-debug.apk` (73201435 bytes)
 - `debugRuntimeClasspath` no contiene `org.json` (el APK no cambia de tamaño
   ni de comportamiento respecto a antes del refactor)
 - Verificación en dispositivo: **pendiente** — no había ningún dispositivo
