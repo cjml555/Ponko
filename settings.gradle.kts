@@ -18,9 +18,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // AAR local con el backend Vulkan de llama.cpp compilado dentro
-        // (el oficial de Maven Central solo trae CPU).
-        maven { url = uri("$rootDir/local-maven") }
     }
 }
 rootProject.name = "LiteRT-Chat"

@@ -92,18 +92,19 @@ dependencies {
     // GGUF (llama.cpp) local model runtime — full llama.cpp API incl. KV-cache reuse
     // (net.ladenthin:llama-android AAR requires minSdk 28, native = arm64-v8a)
     //
-    // AAR local (local-maven/) con el MISMO API de Kotlin que el oficial,
-    // pero con la libreria nativa recompilada con un backend de GPU.
     //
-    // Vulkan: el .so se recompila con el backend dentro (GGML_VULKAN=ON) y
-    // con dos parches que hacen falta en Android:
-    //   1) el dispatcher de Vulkan-Hpp se re-inicializa con el device (si
-    //      no, las funciones de dispositivo quedan a NULL y el proceso
-    //      muere con SIGSEGV en 0x0 al cargar el modelo);
-    //   2) se comprueba que el driver exponga vkGetBufferDeviceAddress
-    //      (algunos lo anuncian pero no lo exportan).
-    // El script reproducible esta en tools/build-llama-vulkan.sh.
-    implementation("net.ladenthin:llama-android-vulkan:5.1.0")
+    // AAR oficial de llama.cpp (solo CPU).
+    //
+    // Se probó una version recompilada con el backend Vulkan dentro
+    // (local-maven/, con el script reproducible en tools/build-llama-vulkan.sh
+    // y dos parches de ggml-vulkan), pero en este movil NO es utilizable:
+    // el driver de la Adreno 710 no compila los shaders de ggml-vulkan
+    // ("vk::Device::createComputePipeline: ErrorUnknown"), y ademas al
+    // cargar el modelo con capas en la GPU el proceso muere con SIGSEGV.
+    // Un .so con Vulkan presente hace que el scheduler use ese backend
+    // para algunas operaciones y las peticiones fallan, asi que se vuelve
+    // al AAR oficial mientras no haya un driver que aguante.
+    implementation("net.ladenthin:llama-android:5.1.0")
     // Markdown rendering for AI replies (bold/lists/headings/code/tables/links)
     implementation("io.noties.markwon:core:4.6.2")
     implementation("io.noties.markwon:ext-tables:4.6.2")

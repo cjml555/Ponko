@@ -3567,8 +3567,24 @@ static vk_buffer ggml_vk_create_buffer(vk_device& device, size_t size, const std
     buf->size = size;
 
     if (device->buffer_device_address) {
-        const vk::BufferDeviceAddressInfo addressInfo(buf->buffer);
-        buf->bda_addr = device->device.getBufferAddress(addressInfo);
+        // Algunos drivers (Adreno en Android) anuncian la feature
+        // bufferDeviceAddress pero NO exportan vkGetBufferDeviceAddress:
+        // getBufferAddress() llama entonces a un puntero de funcion nulo y
+        // el proceso muere con SIGSEGV en la direccion 0x0 (al cargar el
+        // modelo: ModelManager::alloc_params_buffers ->
+        // ggml_vk_create_buffer_device).
+        //
+        // La feature se apaga sin tocar nada mas: todos los usos estan
+        // protegidos por `if (device->buffer_device_address)`.
+        auto pfn_bda = (PFN_vkGetBufferDeviceAddress)
+            vkGetDeviceProcAddr(device->device, "vkGetBufferDeviceAddress");
+        if (pfn_bda == nullptr) {
+            GGML_LOG_WARN("ggml_vulkan: the device does not expose vkGetBufferDeviceAddress; disabling buffer device address\n");
+            device->buffer_device_address = false;
+        } else {
+            const vk::BufferDeviceAddressInfo addressInfo(buf->buffer);
+            buf->bda_addr = device->device.getBufferAddress(addressInfo);
+        }
     }
 
     device->memory_logger->log_allocation(buf, size);

@@ -42,6 +42,23 @@ EOF
 JAVA_HOME="${JAVA_HOME:-$(dirname $(dirname $(readlink -f $(which javac))))}"
 mkdir -p "$BUILD" "$OUT"
 
+# ── Parches propios (tools/patches/) ──
+# 0001: ggml-vulkan en Android (dispatcher + buffer device address)
+# 0002: jllama.cpp (casts de JNI que el NDK moderno exige)
+for _pf in "$PONKO/tools/patches/"*.patch; do
+    [ -e "$_pf" ] || continue
+    echo "aplicando parche $(basename "$_pf")"
+    if ! git -C "$LLAMA_SRC" apply --check "$_pf" 2>/dev/null; then
+        if git -C "$LLAMA_SRC" apply --reverse --check "$_pf" 2>/dev/null; then
+            echo "  (ya aplicado)"
+        else
+            git -C "$LLAMA_SRC" apply "$_pf" || { echo "  NO SE PUDO APLICAR"; exit 1; }
+        fi
+    else
+        git -C "$LLAMA_SRC" apply "$_pf"
+    fi
+done
+
 cmake -S "$JLC" -B "$BUILD" \
     -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
     -DANDROID_ABI=arm64-v8a \

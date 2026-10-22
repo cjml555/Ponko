@@ -397,17 +397,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known issues
 
-- **La aceleracion GPU de GGUF en Android sigue sin estar lista.** Con el
-  AAR de Vulkan, cargar un modelo con capas en la GPU todavia puede matar
-  el proceso: el driver de Adreno 710 de este movil no resuelve bien las
-  funciones de dispositivo de Vulkan. Un SIGSEGV no se puede catchar, asi
-  que la opcion "GPU" del chat **pide** GPU pero **no activa** las capas
-  (`GpuSupport.GGUF_GPU_EXPERIMENTAL = false`) y avisa al usuario. Con
-  CPU el modelo carga y responde bien.
-- El AAR oficial de upstream con OpenCL (`llama-android-opencl`) tampoco
-  sirve aqui: el compilador de shaders del driver de Qualcomm peta
-  (`libllvm-qcom.so` -> `QGPUI64EmulatePass::emulateModule`) al traducir el
-  kernel de ggml. Es un fallo del driver, no del codigo.
+- **La aceleracion GPU de GGUF en Android sigue sin estar lista.** Se
+  compilo un llama.cpp con el backend Vulkan dentro (script reproducible en
+  `tools/build-llama-vulkan.sh`, parches en `tools/patches/`), pero en este
+  movil (Adreno 710, driver 0615.98) no es utilizable:
+  - El dispatcher de Vulkan-Hpp se inicializaba solo con la instancia, asi
+    que las funciones de dispositivo quedaban a NULL (SIGSEGV en 0x0). Se
+    arreglo reinicializandolo con el device.
+  - Aun asi, el driver no resuelve bien `vkWaitSemaphores` al cargar un
+    modelo con capas en la GPU.
+  - Y el AAR oficial de upstream con OpenCL tampoco vale: el compilador de
+    shaders de Qualcomm peta (`libllvm-qcom.so` ->
+    `QGPUI64EmulatePass::emulateModule`) al traducir el kernel de ggml.
+  Como un SIGSEGV no se puede catchar, la opcion "GPU" del chat **pide**
+  GPU pero **no activa** las capas (`GpuSupport.GGUF_GPU_EXPERIMENTAL =
+  false`) y avisa al usuario. El AAR que se usa es el oficial de Maven
+  Central (solo CPU).
+- **El dibujo con backend Vulkan tambien falla en este driver** (preexistente
+  a este trabajo: el proyecto ya compilaba sd.cpp con `SD_VULKAN ON`). Al
+  crear el pipeline de computo, el driver de Adreno revienta
+  (`ggml_vk_create_pipeline_func`). El backend por defecto sigue siendo
+  CPU, asi que no se cambia el comportamiento de siempre.
+
+### Fixed
+
+- **ggml-vulkan: se comprueba que el driver exponga
+  `vkGetBufferDeviceAddress`** (tambien en el ggml que usa el motor de
+  dibujo, app/src/main/cpp/sd/ggml/). Algunos drivers anuncian la feature
+  `bufferDeviceAddress` pero no exportan la funcion: al pedir la direccion
+  del buffer se llamaba a un puntero nulo y el proceso moria con SIGSEGV en
+  la direccion 0x0, al CARGAR el modelo
+  (`ModelManager::alloc_params_buffers` -> `ggml_vk_create_buffer_device`).
+  Ahora se comprueba y, si no esta, se apaga la feature (todos sus usos
+  estan protegidos por `if (device->buffer_device_address)`).
+
+### Verified
+
+- **Carga secuencial de los pesos del dibujo, medida en el dispositivo**
+  (Edge 50 Fusion, sd_turbo-f16-q8_0 de 1,88 GB, sin modelo de chat
+  cargado):
+  - "Baja memoria" (`params_backend = "disk"`): PSS **1,18 GB**, RSS 1,23 GB.
+  - "Alta velocidad": PSS **1,50 GB**, RSS 1,60 GB.
+  - Ahorro: **331 MB de PSS (-21,5 %)** con el mismo modelo.
+  - En "Baja memoria" se genero una imagen completa ("Quitando ruido...
+    paso 686/686 · 63 s"), 0 crashes.
+- **Cache KV Q8_0**: el modelo carga y responde (Gemma 2 2B Q4_K_M,
+  "Number: 12345 Thought: ...", ~4,7 tok/s), 0 crashes. El swap del
+  proceso bajo de 525 MB a 14 MB respecto a la sesion con F16.
 
 ### Fixed
 

@@ -1,0 +1,44 @@
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+index 39b4cd3..751d3de 100644
+--- a/ggml/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -7019,6 +7019,39 @@ static vk_device ggml_vk_get_device(size_t idx) {
+         device_create_info.setPNext(&device_features2);
+         device->device = device->physical_device.createDevice(device_create_info);
+ 
++        // El dispatcher por defecto se inicializó SOLO con la instancia, así
++        // que las funciones de DISPOSITIVO (vkCreateBuffer, vkWaitSemaphores,
++        // vkQueueSubmit, vkGetBufferDeviceAddress…) siguen a NULL. Como el
++        // vk::Device usa ese dispatcher global, llamarlas revienta con
++        // SIGSEGV en la dirección 0x0 (al cargar el modelo, en
++        // llama_model_loader::load_all_data -> vk::Device::waitSemaphores).
++        //
++        // Se re-inicializa pasando el device, que es lo que carga las
++        // funciones de dispositivo.
++        // El dispatcher se inicializa con la INSTANCIA y luego con el DEVICE:
++        // el overload de Device es el que carga las funciones de dispositivo
++        // (vkCreateBuffer, vkWaitSemaphores, vkQueueSubmit…).
++        VULKAN_HPP_DEFAULT_DISPATCHER.init(vk_instance.instance);
++        VULKAN_HPP_DEFAULT_DISPATCHER.init(vk::Device(device->device));
++
++        // Algunos drivers (Adreno en Android) anuncian la feature
++        // bufferDeviceAddress pero NO exportan vkGetBufferDeviceAddress:
++        // getBufferAddress() acaba llamando a un puntero de funcion nulo y
++        // el proceso muere con SIGSEGV en la direccion 0x0 (se ve al
++        // cargar el modelo, en llama_context::output_reserve ->
++        // ggml_vk_host_malloc).
++        //
++        // La feature se puede apagar sin tocar nada mas: todos los usos
++        // estan protegidos por `if (device->buffer_device_address)`.
++        if (device->buffer_device_address) {
++            auto pfn_bda = (PFN_vkGetBufferDeviceAddress)
++                vkGetDeviceProcAddr(device->device, "vkGetBufferDeviceAddress");
++            if (pfn_bda == nullptr) {
++                GGML_LOG_WARN("ggml_vulkan: the device does not expose vkGetBufferDeviceAddress; disabling buffer device address\n");
++                device->buffer_device_address = false;
++            }
++        }
++
+         if (device->device_fault) {
+             device->pfn_vkGetDeviceFaultInfoEXT = (PFN_vkGetDeviceFaultInfoEXT)
+                 vkGetDeviceProcAddr(device->device, "vkGetDeviceFaultInfoEXT");
