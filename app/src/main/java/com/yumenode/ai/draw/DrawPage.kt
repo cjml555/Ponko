@@ -2,6 +2,7 @@
 package com.yumenode.ai.draw
 
 import com.yumenode.ai.DrawCore
+import com.yumenode.ai.DrawMemoryMode
 import com.yumenode.ai.InferConfig
 import com.yumenode.ai.YumenodeTheme
 import com.yumenode.ai.R
@@ -2095,6 +2096,8 @@ class DrawPage(
                 flashAttn = flashAttn,
                 backend = b,
                 slots = SdCppEngine.buildSlots(slots),
+                // 权重按阶段装载：每次只把当前阶段要的组件拉进 RAM
+                diskWeights = DrawMemoryMode.useDiskWeights(c),
             )
             var used = gpuDev ?: "CPU"
             var h = createWith(used)

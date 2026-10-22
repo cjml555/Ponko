@@ -92,6 +92,7 @@ object SdCppEngine {
         flashAttn: Boolean,
         backend: String?,
         slots: Array<String?>?,
+        diskWeights: Boolean,
     ): Long
 
     external fun nativeGenerate(
@@ -192,7 +193,8 @@ object SdCppEngine {
         flashAttn: Boolean = true,
         backend: String? = null,
         slots: Array<String?>? = null,
-    ): Long = nativeCreate(modelPath, vaePath, nThreads, wtype, flashAttn, backend, slots)
+        diskWeights: Boolean = true,
+    ): Long = nativeCreate(modelPath, vaePath, nThreads, wtype, flashAttn, backend, slots, diskWeights)
 
     /**
      * 槽位顺序（与 JNI 里的 SlotIndex 一一对应；sd.cpp 的 sd_ctx_params_t 路径字段）。
