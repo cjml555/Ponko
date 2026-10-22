@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>net.ladenthin</groupId>
+  <artifactId>llama-android-vulkan</artifactId>
+  <version>5.1.0</version>
+  <packaging>aar</packaging>
+  <name>llama-android-vulkan</name>
+  <description>
+    net.ladenthin:llama-android 5.1.0 con el backend Vulkan compilado dentro
+    (GGML_VULKAN=ON) para arm64-v8a. La API de Kotlin es identica al AAR
+    oficial; solo cambia la libreria nativa, que ademas lleva el backend de
+    Vulkan en vez de solo CPU.
+  </description>
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/licenses/MIT</url>
+    </license>
+  </licenses>
+  <dependencies>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.22.2</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>2.0.18</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+      <version>1.0.1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.checkerframework</groupId>
+      <artifactId>checker-qual</artifactId>
+      <version>4.2.2</version>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
+</project>

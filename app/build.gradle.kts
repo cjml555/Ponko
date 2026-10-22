@@ -91,7 +91,19 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     // GGUF (llama.cpp) local model runtime — full llama.cpp API incl. KV-cache reuse
     // (net.ladenthin:llama-android AAR requires minSdk 28, native = arm64-v8a)
-    implementation("net.ladenthin:llama-android:5.1.0")
+    //
+    // AAR local (local-maven/) con el MISMO API de Kotlin que el oficial,
+    // pero con la libreria nativa recompilada con un backend de GPU.
+    //
+    // Vulkan: el .so se recompila con el backend dentro (GGML_VULKAN=ON) y
+    // con dos parches que hacen falta en Android:
+    //   1) el dispatcher de Vulkan-Hpp se re-inicializa con el device (si
+    //      no, las funciones de dispositivo quedan a NULL y el proceso
+    //      muere con SIGSEGV en 0x0 al cargar el modelo);
+    //   2) se comprueba que el driver exponga vkGetBufferDeviceAddress
+    //      (algunos lo anuncian pero no lo exportan).
+    // El script reproducible esta en tools/build-llama-vulkan.sh.
+    implementation("net.ladenthin:llama-android-vulkan:5.1.0")
     // Markdown rendering for AI replies (bold/lists/headings/code/tables/links)
     implementation("io.noties.markwon:core:4.6.2")
     implementation("io.noties.markwon:ext-tables:4.6.2")
