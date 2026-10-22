@@ -2507,7 +2507,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             return
         }
         val path = modelPath ?: run { toast(getString(R.string.s_175)); return }
-        val isGguf = path.endsWith(".gguf", ignoreCase = true)
+        val isGguf = ModelLoadDecision.isGguf(path)
         val backendName = backendSpinner.selectedItem.toString()
         val thinking = thinkCheck.isChecked
         applyBusy(true)
@@ -2523,8 +2523,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     val cpus = InferConfig.threads(this@MainActivity)
                     // 后端选 GPU 时把全部层交给 Vulkan（llama.cpp 用 -1 表示
                     // "全部"）；二进制没带 Vulkan 后端时 ggml 会静默留在 CPU。
-                    val gpuWanted = backendName == "GPU"
-                    val gpuLayers = if (gpuWanted) GpuSupport.GPU_LAYERS_ALL else 0
+                    val gpuWanted = ModelLoadDecision.wantsGpu(backendName)
+                    val gpuLayers = ModelLoadDecision.gpuLayers(backendName)
                     val params = ModelLoadSpecs.llamaParams(
                         path = path,
                         ctxSize = chatParams.ctx(),
@@ -2539,7 +2539,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     val vok = try { m.supportsVision() } catch (_: Throwable) { false }
                     // 运行时确认到底落在哪：getLlamaCppBuildInfo() 会带上编译
                     // 时的后端列表，"VULKAN" 在里面才说明真的会走 GPU。
-                    val onGpu = gpuWanted && GpuSupport.isVulkanBuiltIn()
+                    val onGpu = ModelLoadDecision.actuallyOnGpu(backendName, GpuSupport.isVulkanBuiltIn())
                     withContext(Dispatchers.Main) {
                         llamaModel = m
                         visionOk = vok
@@ -2559,7 +2559,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                     }
                 } else {
                     // 后端：选 GPU 时先试 LiteRT 的 GPU 后端；设备/驱动不支持就自动退回 CPU
-                    val gpuWanted = backendName == "GPU"
+                    val gpuWanted = ModelLoadDecision.wantsGpu(backendName)
                     var usedBackendName = backendName
                     // 先读模型自带的 Capabilities：是否为多模态（图文）模型
                     val vok = probeVision(path)

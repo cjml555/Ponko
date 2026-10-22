@@ -458,6 +458,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Refactor — page extraction (incremental monolith reduction)
 
+- **ModelLoadDecision extracted** (`ModelLoadDecision.kt`)
+  - The *decision* layer of `toggleLoad()` moved into a pure object: gguf vs
+    LiteRT detection, GPU intent, llama.cpp layer count, "actually on GPU"
+    (requires a Vulkan-enabled build), the GPU→CPU fallback warning, and the
+    model label (path minus directory).
+  - **17 JVM characterization tests** pin each branch (asking for GPU is not
+    the same as running on GPU — that distinction is the one the toast depends on).
+  - `toggleLoad()` now calls the object; behavior unchanged. The orchestration
+    (engine/native/coroutine) stays in `MainActivity`.
+
 - **ChatInputBar extracted** (`ChatInputBar.kt`)
   - `buildInputBar()` left `MainActivity` for a dedicated class owning its six
     views (think checkbox, attachment preview strip + box, text field, ＋ button,
