@@ -1,6 +1,7 @@
 // Yumenode AI · (c) 2026 visitor257 · MIT License · github.com/visitor257/Yumenode AI
 package com.yumenode.ai
 
+import android.util.Log
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
@@ -129,6 +130,25 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private val crashHandler = CrashHandler(this)
     internal val sessionManager = SessionManager(this)
     internal val attachmentHandler = AttachmentHandler.create(this, this)
+
+    /** Barra de entrada del chat: dueña de sus vistas (MainActivity las delega). */
+    private lateinit var chatInputBar: ChatInputBar
+
+    /** Contrato mínimo que la barra de entrada necesita de la Activity. */
+    private fun createInputBarHost() = object : InputBarHost {
+        override val activity: android.app.Activity get() = this@MainActivity
+        override val palette: YumenodeTheme get() = this@MainActivity.palette
+        override fun chatPrefs(): android.content.SharedPreferences = this@MainActivity.chatPrefs()
+        override fun attachPreviewViews(strip: HorizontalScrollView, box: LinearLayout) {
+            attachmentHandler.attachViews(strip, box)
+        }
+        override fun onAttachClick() {
+            this@MainActivity.onAttachClick()
+        }
+        override fun onSendOrStop() {
+            this@MainActivity.onSendOrStop()
+        }
+    }
 
     internal val commandScanner = CommandScanner()
 
@@ -339,10 +359,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         set(v) { visionManager?.mmprojPath = v }
     /** 「借打标看图」时工具结果用哪个角色候选回传（0=首选，试错后记住可用的那个） */
     internal var tagReturnIdx = 0
-    /** 输入栏「＋」附件按钮；待发送图片的预览条与缩略图 */
-    private lateinit var attachButton: TextView
-    private lateinit var attachPreviewStrip: HorizontalScrollView
-    private lateinit var attachPreviewBox: LinearLayout
+    /** 输入栏「＋」附件按钮；待发送图片的预览条与缩略图（propiedad de ChatInputBar) */
+    private val attachButton: TextView get() = chatInputBar.attachButton
+    private val attachPreviewStrip: HorizontalScrollView get() = chatInputBar.attachPreviewStrip
+    private val attachPreviewBox: LinearLayout get() = chatInputBar.attachPreviewBox
 
     /** 待发送的文本文件（已解析出文字），最多 MAX_FILES 个 */
     // private val pendingFiles = ArrayList<PendingFile>()
@@ -565,16 +585,16 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private var pendingDrawStage: String? = null
     private val backendSpinner: Spinner get() = modelsPage.backendSpinner
     private val loadButton: TextView get() = modelsPage.loadButton
-    internal lateinit var thinkCheck: CheckBox
+    internal val thinkCheck: CheckBox get() = chatInputBar.thinkCheck
     private val progressBar: ProgressBar get() = modelsPage.progressBar
     private lateinit var chatContainer: LinearLayout
     private lateinit var scrollView: ScrollView
-    internal lateinit var inputEdit: EditText
+    internal val inputEdit: EditText get() = chatInputBar.inputEdit
 
     /** Pestaña de descargas (lista del catálogo + progreso). */
     private var downloadPage: DownloadPage? = null
     private var galleryPage: GalleryPage? = null
-    private lateinit var sendButton: TextView
+    private val sendButton: TextView get() = chatInputBar.sendButton
     private lateinit var jumpButton: TextView
 
     // ---- scroll state (delegado a ChatScrollManager) ----
@@ -844,7 +864,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         main.addView(contentFrame, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        inputBar = buildInputBar()
+        chatInputBar = ChatInputBar(createInputBarHost())
+        inputBar = chatInputBar.build()
         main.addView(inputBar, matchWrap())
         main.addView(buildBottomNav(), matchWrap())
 
@@ -1447,85 +1468,6 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         drawerOpen = false
     }
 
-    private fun buildInputBar(): View {
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(C_CARD)
-            setPadding(dp(10), dp(4), dp(10), dp(8))
-            elevation = dp(6).toFloat()
-        }
-
-        thinkCheck = CheckBox(this).apply {
-            text = getString(R.string.s_105)
-            textSize = 12.5f
-            setTextColor(C_TEXT)
-            isChecked = chatPrefs().getBoolean(KEY_CHAT_THINK, true)
-            buttonTintList = ColorStateList.valueOf(C_PRIMARY)
-            setOnCheckedChangeListener { _, v -> chatPrefs().edit().putBoolean(KEY_CHAT_THINK, v).apply() }
-        }
-        bar.addView(thinkCheck, matchWrap())
-
-        // 待发送图片预览条（横向可滚动，每张一个小缩略图 + 右上角 ×）
-        attachPreviewStrip = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            visibility = View.GONE
-            setPadding(0, dp(2), 0, dp(6))
-        }
-        attachPreviewBox = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        attachPreviewStrip.addView(attachPreviewBox)
-        bar.addView(attachPreviewStrip, matchWrap())
-
-        // 预览条的重建逻辑在 AttachmentHandler（增删附件后自动刷新）
-        attachmentHandler.attachViews(attachPreviewStrip, attachPreviewBox)
-
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
-        }
-
-        inputEdit = EditText(this).apply {
-            hint = getString(R.string.s_180)
-            textSize = 15f
-            setTextColor(C_TEXT)
-            setHintTextColor(C_HINT)
-            background = rounded(C_SOFT_BTN, 20)
-            setPadding(dp(16), dp(10), dp(16), dp(10))
-            inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            minLines = 1
-            maxLines = 5
-            gravity = Gravity.TOP or Gravity.START
-        }
-        row.addView(inputEdit, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-
-        attachButton = TextView(this).apply {
-            text = "＋"
-            textSize = 20f
-            setTextColor(C_PRIMARY)
-            gravity = Gravity.CENTER
-            background = rounded(C_PRIMARY_SOFT, 22)
-            isClickable = true
-            setOnClickListener { onAttachClick() }
-        }
-        row.addView(attachButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(8) })
-
-        sendButton = TextView(this).apply {
-            text = "↑"
-            textSize = 19f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            background = rounded(C_PRIMARY, 22)
-            isClickable = true
-            setOnClickListener { onSendOrStop() }
-        }
-        row.addView(sendButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(8) })
-        bar.addView(row, matchWrap())
-        return bar
-    }
 
     // ================= 聊天发图（.litertlm 多模态） =================
 
@@ -2543,6 +2485,22 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             .show()
     }
 
+    /**
+     * Activa el log nativo de llama.cpp (ggml). Sin esto, un fallo en el
+     * backend sale como un crash sin contexto: el .so no dice nada.
+     */
+    private fun enableLlamaLog() {
+        try {
+            net.ladenthin.llama.LlamaModel.setLogger(
+                net.ladenthin.llama.args.LogFormat.TEXT
+            ) { _, msg ->
+                Log.i("LlamaCpp", msg)
+            }
+        } catch (_: Throwable) {
+            // Si el runtime no lo soporta, se sigue sin log.
+        }
+    }
+
     private fun toggleLoad() {
         if (engine != null || llamaModel != null) {
             unloadModel()
@@ -2559,18 +2517,29 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         scope.launch(Dispatchers.IO) {
             try {
                 if (isGguf) {
+                    enableLlamaLog()
                     // llama.cpp：单 slot + cache_prompt。会话内 KV 前缀会被复用，长对话只需计算新增 token。
                     // 线程数走全局设置（「关于 → 设置」），与绘图、打标共用同一个值。
                     val cpus = InferConfig.threads(this@MainActivity)
+                    // 后端选 GPU 时把全部层交给 Vulkan（llama.cpp 用 -1 表示
+                    // "全部"）；二进制没带 Vulkan 后端时 ggml 会静默留在 CPU。
+                    val gpuWanted = backendName == "GPU"
+                    val gpuLayers = if (gpuWanted) GpuSupport.GPU_LAYERS_ALL else 0
                     val params = ModelLoadSpecs.llamaParams(
                         path = path,
                         ctxSize = chatParams.ctx(),
                         maxOut = chatParams.maxOut(),
                         threads = cpus,
                         mmprojPath = mmprojPath,
+                        gpuLayers = gpuLayers,
+                        cacheTypeK = KvCacheConfig.type(this@MainActivity),
+                        cacheTypeV = KvCacheConfig.type(this@MainActivity),
                     )
                     val m = LlamaModel(params)
                     val vok = try { m.supportsVision() } catch (_: Throwable) { false }
+                    // 运行时确认到底落在哪：getLlamaCppBuildInfo() 会带上编译
+                    // 时的后端列表，"VULKAN" 在里面才说明真的会走 GPU。
+                    val onGpu = gpuWanted && GpuSupport.isVulkanBuiltIn()
                     withContext(Dispatchers.Main) {
                         llamaModel = m
                         visionOk = vok
@@ -2582,8 +2551,11 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                         engine = null
                         conversation = null
                         convThinking = null
-                        setStatus(getString(R.string.s_078), C_OK)
-                        if (backendName == "GPU") toast(getString(R.string.s_016))
+                        setStatus(
+                            if (onGpu) getString(R.string.s_078_gpu) else getString(R.string.s_078),
+                            C_OK
+                        )
+                        if (gpuWanted && !onGpu) toast(getString(R.string.s_016))
                     }
                 } else {
                     // 后端：选 GPU 时先试 LiteRT 的 GPU 后端；设备/驱动不支持就自动退回 CPU

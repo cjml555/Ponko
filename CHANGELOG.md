@@ -458,6 +458,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Refactor — page extraction (incremental monolith reduction)
 
+- **ChatInputBar extracted** (`ChatInputBar.kt`)
+  - `buildInputBar()` left `MainActivity` for a dedicated class owning its six
+    views (think checkbox, attachment preview strip + box, text field, ＋ button,
+    ↑ button), wired through a narrow `InputBarHost` contract.
+  - `MainActivity` keeps read-only getter delegations for those views, so the
+    ~8 existing call sites (`toggleLoad`, `setBusy`, `onSendOrStop`, …) are
+    unchanged. `MainActivity`: 3,496 → 3,437 lines.
+  - Renamed the new field to `chatInputBar` to avoid colliding with the
+    pre-existing `inputBar: View` (the chat page root).
+
 - **ModelsPage extracted** (`fcd86be`)
   - Moved the entire `buildModelsPage()` body out of `MainActivity` into a new
     `ModelsPage.kt` (584 lines) owned by a narrow `ModelsHost` contract
