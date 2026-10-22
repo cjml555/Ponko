@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-21
+
 ### Added
 
 - **Descarga por rangos en paralelo con reanudacion** (`RangedDownloader.kt`,
