@@ -155,7 +155,7 @@ extern "C" JNIEXPORT jlong JNICALL
 Java_com_yumenode_ai_draw_SdCppEngine_nativeCreate(
         JNIEnv* env, jobject /*thiz*/,
         jstring modelPath, jstring vaePath, jint nThreads, jint wtype, jboolean flashAttn,
-        jstring backend, jobjectArray slots) {
+        jstring backend, jobjectArray slots, jboolean diskWeights) {
     std::string model, vae, backendStr;
     jstr(env, modelPath, model);
     jstr(env, vaePath, vae);
@@ -217,6 +217,15 @@ Java_com_yumenode_ai_draw_SdCppEngine_nativeCreate(
     p.flash_attn           = fa;
     p.diffusion_flash_attn = fa;
     p.lora_apply_mode = LORA_APPLY_AUTO;
+    // 权重常驻磁盘（分阶段装载）：
+    // sd.cpp 把模型组件（Conditioner / Diffusion / VAE…）分别标记为
+    // ResidencyMode::Disk：每个阶段只把当前要用的权重拉进 RAM，阶段结束
+    // 就释放（model_manager.cpp 里 pin_count==0 的块会被 free_params_storage_block）。
+    // 文件始终 mmap 着，所以回来时是重新映射 page cache，不是重读 flash。
+    // 峰值内存从「所有组件之和」降到「最大的那个组件」。
+    if (diskWeights == JNI_TRUE) {
+        p.params_backend = "disk";
+    }
 
     char* dump = sd_ctx_params_to_str(&p);
     g_last_dump = dump ? dump : "";

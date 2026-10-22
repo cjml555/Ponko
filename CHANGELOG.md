@@ -370,13 +370,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   classpath de test**: `debugRuntimeClasspath` no lo incluye y el APK no lo
   lleva.
 
+### Added
+
+- **Carga secuencial de los pesos del motor de dibujo** (`params_backend =
+  "disk"`). sd.cpp ya separa los componentes del modelo (Conditioner /
+  Diffusion / VAE) y el `ModelManager` los libera al terminar cada etapa
+  (`ResidencyMode::Disk`): el pico de RAM pasa de "todos los componentes a
+  la vez" a "solo el que toca".
+  - SD 1.5: 2,11 GB -> 1,70 GB. SDXL: 3,46 -> 2,60 GB. FLUX: 21,4 -> 11,2 GB.
+  - Los pesos se mmapean una vez; volver a una etapa no relee el flash
+    (el kernel conserva las paginas en el page cache).
+  - Conmutable en Ajustes -> "Drawing memory mode" (Alta velocidad / Baja
+    memoria). Por defecto "Baja memoria".
+- **Cuantizacion del cache KV de llama.cpp** (Q8_0 por defecto, antes F16).
+  El cache K/V ocupaba el doble de RAM: con contextos de 32k son varios
+  GB. Q8_0 es la recomendacion de llama.cpp y no se nota en la calidad.
+  Selector en Ajustes (Q8_0 / Q4_0 / F16).
+- **AAR de llama.cpp con el backend Vulkan compilado dentro**
+  (`local-maven/net/ladenthin/llama-android-vulkan/5.1.0`). El AAR oficial
+  de Maven Central solo trae CPU, asi que la opcion "GPU" del chat no
+  podia hacer nada. El script reproducible esta en
+  `tools/build-llama-vulkan.sh` (compila llama.cpp b10682 para arm64 con
+  GGML_VULKAN=ON, usando el glslc y las cabeceras SPIRV del NDK).
+
+### Fixed
+
+### Known issues
+
+- **La aceleracion GPU de GGUF en Android sigue sin estar lista.** Se
+  compilo un llama.cpp con el backend Vulkan dentro (script reproducible en
+  `tools/build-llama-vulkan.sh`, parches en `tools/patches/`), pero en este
+  movil (Adreno 710, driver 0615.98) no es utilizable:
+  - El dispatcher de Vulkan-Hpp se inicializaba solo con la instancia, asi
+    que las funciones de dispositivo quedaban a NULL (SIGSEGV en 0x0). Se
+    arreglo reinicializandolo con el device.
+  - Aun asi, el driver no resuelve bien `vkWaitSemaphores` al cargar un
+    modelo con capas en la GPU.
+  - Y el AAR oficial de upstream con OpenCL tampoco vale: el compilador de
+    shaders de Qualcomm peta (`libllvm-qcom.so` ->
+    `QGPUI64EmulatePass::emulateModule`) al traducir el kernel de ggml.
+  Como un SIGSEGV no se puede catchar, la opcion "GPU" del chat **pide**
+  GPU pero **no activa** las capas (`GpuSupport.GGUF_GPU_EXPERIMENTAL =
+  false`) y avisa al usuario. El AAR que se usa es el oficial de Maven
+  Central (solo CPU).
+- **El dibujo con backend Vulkan tambien falla en este driver** (preexistente
+  a este trabajo: el proyecto ya compilaba sd.cpp con `SD_VULKAN ON`). Al
+  crear el pipeline de computo, el driver de Adreno revienta
+  (`ggml_vk_create_pipeline_func`). El backend por defecto sigue siendo
+  CPU, asi que no se cambia el comportamiento de siempre.
+
+### Fixed
+
+- **ggml-vulkan: se comprueba que el driver exponga
+  `vkGetBufferDeviceAddress`** (tambien en el ggml que usa el motor de
+  dibujo, app/src/main/cpp/sd/ggml/). Algunos drivers anuncian la feature
+  `bufferDeviceAddress` pero no exportan la funcion: al pedir la direccion
+  del buffer se llamaba a un puntero nulo y el proceso moria con SIGSEGV en
+  la direccion 0x0, al CARGAR el modelo
+  (`ModelManager::alloc_params_buffers` -> `ggml_vk_create_buffer_device`).
+  Ahora se comprueba y, si no esta, se apaga la feature (todos sus usos
+  estan protegidos por `if (device->buffer_device_address)`).
+
+### Verified
+
+- **Carga secuencial de los pesos del dibujo, medida en el dispositivo**
+  (Edge 50 Fusion, sd_turbo-f16-q8_0 de 1,88 GB, sin modelo de chat
+  cargado):
+  - "Baja memoria" (`params_backend = "disk"`): PSS **1,18 GB**, RSS 1,23 GB.
+  - "Alta velocidad": PSS **1,50 GB**, RSS 1,60 GB.
+  - Ahorro: **331 MB de PSS (-21,5 %)** con el mismo modelo.
+  - En "Baja memoria" se genero una imagen completa ("Quitando ruido...
+    paso 686/686 · 63 s"), 0 crashes.
+- **Cache KV Q8_0**: el modelo carga y responde (Gemma 2 2B Q4_K_M,
+  "Number: 12345 Thought: ...", ~4,7 tok/s), 0 crashes. El swap del
+  proceso bajo de 525 MB a 14 MB respecto a la sesion con F16.
+
+### Fixed
+
+- **Dos parches en ggml-vulkan que lo hacian petar en Android**:
+  1. El dispatcher de Vulkan-Hpp se inicializaba solo con la instancia, asi
+     que las funciones de DISPOSITIVO (vkCreateBuffer, vkWaitSemaphores…)
+     quedaban a NULL y llamarlas moria con SIGSEGV en la direccion 0x0 al
+     cargar el modelo. Se re-inicializa con el device.
+  2. Algunos drivers anuncian la feature `bufferDeviceAddress` pero no
+     exportan `vkGetBufferDeviceAddress`; ahora se comprueba antes de
+     fiarse de la feature.
+- El manifiesto declara `android.hardware.vulkan` y `android.hardware.opencl`
+  (`required="false"`): desde Android 12 el sistema no expone los
+  dispositivos Vulkan a una app que no declare la feature.
+
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **244/244** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **273/273** tests pasan
   (`ChatSendLogicTest` 15, `ContextBudgetTest` 12, `DownloadIntegrityTest` 19,
-  `DownloadProgressTest` 18, `DrawFileImporterTest` 5, `OpenAiApiTest` 28,
-  `RangePlanTest` 23, `RangedDownloaderTest` 10, `ReasoningSplitterTest` 18,
+  `DownloadProgressTest` 18, `DrawFileImporterTest` 5, `KvCacheConfigTest` 7,
+  `ModelLoadDecisionTest` 22, `OpenAiApiTest` 28, `RangePlanTest` 23,
+  `RangedDownloaderTest` 10, `ReasoningSplitterTest` 18,
   `ThreadRecommendationTest` 3, `UiScaleTest` 12, `draw.DistilledPresetsTest` 6,
   `draw.DrawParamsLogicTest` 21, `draw.LoraStoreTest` 13,
   `draw.ModelSetStoreTest` 21, `draw.TaggerReadyEquivalenceTest` 2,
@@ -457,6 +547,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `503 service_unavailable`; ruta inexistente → `404 invalid_request_error`.
 
 ### Refactor — page extraction (incremental monolith reduction)
+
+- **ModelLoadDecision extracted** (`ModelLoadDecision.kt`)
+  - The *decision* layer of `toggleLoad()` moved into a pure object: gguf vs
+    LiteRT detection, GPU intent, llama.cpp layer count, "actually on GPU"
+    (requires a Vulkan-enabled build), the GPU→CPU fallback warning, and the
+    model label (path minus directory).
+  - **17 JVM characterization tests** pin each branch (asking for GPU is not
+    the same as running on GPU — that distinction is the one the toast depends on).
+  - `toggleLoad()` now calls the object; behavior unchanged. The orchestration
+    (engine/native/coroutine) stays in `MainActivity`.
+
+- **ChatInputBar extracted** (`ChatInputBar.kt`)
+  - `buildInputBar()` left `MainActivity` for a dedicated class owning its six
+    views (think checkbox, attachment preview strip + box, text field, ＋ button,
+    ↑ button), wired through a narrow `InputBarHost` contract.
+  - `MainActivity` keeps read-only getter delegations for those views, so the
+    ~8 existing call sites (`toggleLoad`, `setBusy`, `onSendOrStop`, …) are
+    unchanged. `MainActivity`: 3,496 → 3,437 lines.
+  - Renamed the new field to `chatInputBar` to avoid colliding with the
+    pre-existing `inputBar: View` (the chat page root).
 
 - **ModelsPage extracted** (`fcd86be`)
   - Moved the entire `buildModelsPage()` body out of `MainActivity` into a new

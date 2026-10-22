@@ -1,6 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Vulkan（GPU 加速）。
+         Android 12 (API 31) 起，系统只在应用声明了 Vulkan feature 时才把
+         物理设备暴露给 vkEnumeratePhysicalDevices：不声明的话 el driver se
+         carga pero la enumeracion devuelve 0 dispositivos, y el backend de
+         ggml-vulkan revienta con SIGSEGV al usar el buffer host.
+         required="false": la app sigue funcionando en dispositivos sin Vulkan
+         (el motor cae a CPU). -->
+    <uses-feature
+        android:name="android.hardware.vulkan"
+        android:required="false" />
+    <!-- OpenCL (GPU de Adreno). El .so nativo lo necesita como NEEDED, asi
+         que sin declararlo el linker no lo expone y la app no arranca. -->
+    <uses-feature
+        android:name="android.hardware.opencl"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.vulkan.level"
+        android:required="false"
+        android:version="0x400003" />
+
     <!-- Android 9 及以下保存图片到相册需要；Android 10+ 走 MediaStore，无需权限 -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"

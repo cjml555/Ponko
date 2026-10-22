@@ -91,6 +91,19 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     // GGUF (llama.cpp) local model runtime — full llama.cpp API incl. KV-cache reuse
     // (net.ladenthin:llama-android AAR requires minSdk 28, native = arm64-v8a)
+    //
+    //
+    // AAR oficial de llama.cpp (solo CPU).
+    //
+    // Se probó una version recompilada con el backend Vulkan dentro
+    // (local-maven/, con el script reproducible en tools/build-llama-vulkan.sh
+    // y dos parches de ggml-vulkan), pero en este movil NO es utilizable:
+    // el driver de la Adreno 710 no compila los shaders de ggml-vulkan
+    // ("vk::Device::createComputePipeline: ErrorUnknown"), y ademas al
+    // cargar el modelo con capas en la GPU el proceso muere con SIGSEGV.
+    // Un .so con Vulkan presente hace que el scheduler use ese backend
+    // para algunas operaciones y las peticiones fallan, asi que se vuelve
+    // al AAR oficial mientras no haya un driver que aguante.
     implementation("net.ladenthin:llama-android:5.1.0")
     // Markdown rendering for AI replies (bold/lists/headings/code/tables/links)
     implementation("io.noties.markwon:core:4.6.2")

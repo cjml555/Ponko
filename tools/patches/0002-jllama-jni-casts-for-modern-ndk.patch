@@ -1,0 +1,18 @@
+diff --git a/llama/src/main/cpp/jllama.cpp b/llama/src/main/cpp/jllama.cpp
+index 04049df..a099868 100644
+--- a/llama/src/main/cpp/jllama.cpp
++++ b/llama/src/main/cpp/jllama.cpp
+@@ -970,10 +970,12 @@ static void load_model_impl(JNIEnv *env, jobject obj, jobjectArray jparams, jobj
+ 
+     jctx->worker = std::thread([jctx]() {
+         JNIEnv *tenv;
++        // GetEnv sigue la firma antigua (void**), pero AttachCurrentThread en
++        // el NDK moderno pide JNIEnv**: cada uno necesita su cast.
+         jint res = g_vm->GetEnv((void **)&tenv, JNI_VERSION_1_6);
+         bool attached = false;
+         if (res == JNI_EDETACHED) {
+-            res = g_vm->AttachCurrentThread((void **)&tenv, nullptr);
++            res = g_vm->AttachCurrentThread(reinterpret_cast<JNIEnv **>(&tenv), nullptr);
+             if (res != JNI_OK) {
+                 jctx->worker_ready.store(true);
+                 return;
