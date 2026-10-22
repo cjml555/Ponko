@@ -37,7 +37,7 @@ class SegmentedSwitch @JvmOverloads constructor(
     private val rect = RectF()
 
     private val density = resources.displayMetrics.density
-    private fun dpV(v: Float) = v * density
+    private fun dpV(v: Float) = UiScale.dpToPxFloat(v, density)
 
     private val trackHeight = dpV(42f)
     private val innerPad = dpV(3.5f)

@@ -42,20 +42,42 @@ class ReasoningSplitter(
                 0 -> {
                     val lead = s.length - s.trimStart().length
                     val core = s.substring(lead)
-                    val hit = findFirst(core, starts)
+                    // El marcador " thinking" empieza por un espacio, asi que
+                    // hay que buscarlo en el texto CON los blancos iniciales
+                    // (s), no en `core` (que ya no los tiene): si no, nunca
+                    // se encuentra y el razonamiento de DeepSeek/Qwen/GLM no
+                    // se separa de la respuesta.
+                    val hit = findFirst(s, starts)
                     if (hit != null) {
                         // 标记之前的内容（含前导空白）按正文输出
-                        if (lead > 0) onAnswer(s.substring(0, lead))
-                        buf.delete(0, lead + hit.first + hit.second.length)
+                        // El texto previo al marcador se EMITE, no se pierde:
+                        // `lead` son solo los blancos iniciales, pero puede
+                        // haber texto antes del marcador.
+                        if (hit.first > 0) onAnswer(s.substring(0, hit.first))
+                        buf.delete(0, hit.first + hit.second.length)
                         state = 1
                         again = true
-                    } else if (core.isNotEmpty() && pendingTail(core, starts) == core.length) {
-                        // 整段都可能是标记的前缀 → 等更多数据
                     } else {
-                        // 开头不是思考标记：以后都按正文
-                        onAnswer(s)
-                        buf.setLength(0)
-                        state = 2
+                        // El sufijo del buffer puede ser el inicio de un marcador:
+                        // se retiene hasta ver si se completa. El resto (el
+                        // texto que ya sabemos que NO es marcador) se emite
+                        // como respuesta.
+                        //
+                        // OJO: `pendingTail` se calcula sobre `s` (que incluye
+                        // los blancos iniciales) y el texto que va antes del
+                        // marcador es `s` menos ese sufijo. Comparar el
+                        // resultado con `core.length` (sin blancos) no tiene
+                        // sentido: son magnitudes distintas y la retencion
+                        // nunca ocurre.
+                        val keep = pendingTail(s, starts)
+                        val emit = s.length - keep
+                        if (emit > 0) onAnswer(s.substring(0, emit))
+                        if (keep > 0) {
+                            buf.delete(0, emit)
+                        } else {
+                            buf.setLength(0)
+                            state = 2
+                        }
                     }
                 }
                 1 -> {

@@ -74,19 +74,13 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
     var loraBox: LinearLayout? = null
         private set
 
-    private fun dp(p: Int): Int = UiHelpers.dp(p, activity)
+    private fun dp(p: Int): Int = UiScale.dpToPx(p, activity.resources.displayMetrics.density)
     private fun getString(resId: Int): String = activity.getString(resId)
     private fun matchWrap(topMargin: Int = 0) =
-        LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { this.topMargin = dp(topMargin) }
+        with(activity) { matchWrap(topMargin) }
 
     private fun wrapWrap(leftMargin: Int = 0) =
-        LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { this.leftMargin = dp(leftMargin) }
+        with(activity) { wrapWrap(leftMargin) }
 
     fun build(): View {
         val root = LinearLayout(activity).apply {
@@ -437,6 +431,11 @@ class ModelsPage(private val host: ModelsHost) : ThemeAliases {
         )
         drawCard.addView(
             ui.actionButton(getString(R.string.s_219)) { host.onPickLoraFile() },
+            matchWrap(topMargin = 8)
+        )
+        // TAESD: mini autoencoder para decodificar mucho mas rapido en CPU
+        drawCard.addView(
+            ui.actionButton(getString(R.string.s_548)) { host.onPickTaesdSource() },
             matchWrap(topMargin = 8)
         )
         drawCard.addView(

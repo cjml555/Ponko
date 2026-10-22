@@ -1,6 +1,7 @@
 // Yumenode AI · (c) 2026 visitor257 · MIT License · github.com/visitor257/Yumenode AI
 package com.yumenode.ai
 
+import android.util.Log
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
@@ -53,6 +54,7 @@ import com.google.ai.edge.litertlm.ModelInfo
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Contents
 import com.yumenode.ai.draw.DrawPage
+import com.yumenode.ai.draw.ModelSet
 import com.yumenode.ai.draw.GgufProbe
 import com.yumenode.ai.draw.TaggerEngine
 import com.google.ai.edge.litertlm.Conversation
@@ -128,6 +130,25 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private val crashHandler = CrashHandler(this)
     internal val sessionManager = SessionManager(this)
     internal val attachmentHandler = AttachmentHandler.create(this, this)
+
+    /** Barra de entrada del chat: dueña de sus vistas (MainActivity las delega). */
+    private lateinit var chatInputBar: ChatInputBar
+
+    /** Contrato mínimo que la barra de entrada necesita de la Activity. */
+    private fun createInputBarHost() = object : InputBarHost {
+        override val activity: android.app.Activity get() = this@MainActivity
+        override val palette: YumenodeTheme get() = this@MainActivity.palette
+        override fun chatPrefs(): android.content.SharedPreferences = this@MainActivity.chatPrefs()
+        override fun attachPreviewViews(strip: HorizontalScrollView, box: LinearLayout) {
+            attachmentHandler.attachViews(strip, box)
+        }
+        override fun onAttachClick() {
+            this@MainActivity.onAttachClick()
+        }
+        override fun onSendOrStop() {
+            this@MainActivity.onSendOrStop()
+        }
+    }
 
     internal val commandScanner = CommandScanner()
 
@@ -338,10 +359,10 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         set(v) { visionManager?.mmprojPath = v }
     /** 「借打标看图」时工具结果用哪个角色候选回传（0=首选，试错后记住可用的那个） */
     internal var tagReturnIdx = 0
-    /** 输入栏「＋」附件按钮；待发送图片的预览条与缩略图 */
-    private lateinit var attachButton: TextView
-    private lateinit var attachPreviewStrip: HorizontalScrollView
-    private lateinit var attachPreviewBox: LinearLayout
+    /** 输入栏「＋」附件按钮；待发送图片的预览条与缩略图（propiedad de ChatInputBar) */
+    private val attachButton: TextView get() = chatInputBar.attachButton
+    private val attachPreviewStrip: HorizontalScrollView get() = chatInputBar.attachPreviewStrip
+    private val attachPreviewBox: LinearLayout get() = chatInputBar.attachPreviewBox
 
     /** 待发送的文本文件（已解析出文字），最多 MAX_FILES 个 */
     // private val pendingFiles = ArrayList<PendingFile>()
@@ -564,16 +585,16 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private var pendingDrawStage: String? = null
     private val backendSpinner: Spinner get() = modelsPage.backendSpinner
     private val loadButton: TextView get() = modelsPage.loadButton
-    internal lateinit var thinkCheck: CheckBox
+    internal val thinkCheck: CheckBox get() = chatInputBar.thinkCheck
     private val progressBar: ProgressBar get() = modelsPage.progressBar
     private lateinit var chatContainer: LinearLayout
     private lateinit var scrollView: ScrollView
-    internal lateinit var inputEdit: EditText
+    internal val inputEdit: EditText get() = chatInputBar.inputEdit
 
     /** Pestaña de descargas (lista del catálogo + progreso). */
     private var downloadPage: DownloadPage? = null
     private var galleryPage: GalleryPage? = null
-    private lateinit var sendButton: TextView
+    private val sendButton: TextView get() = chatInputBar.sendButton
     private lateinit var jumpButton: TextView
 
     // ---- scroll state (delegado a ChatScrollManager) ----
@@ -843,7 +864,8 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         main.addView(contentFrame, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        inputBar = buildInputBar()
+        chatInputBar = ChatInputBar(createInputBarHost())
+        inputBar = chatInputBar.build()
         main.addView(inputBar, matchWrap())
         main.addView(buildBottomNav(), matchWrap())
 
@@ -1168,6 +1190,28 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private fun buildSettingsPage(): View = SettingsPage(this).build()
 
     /** Crea el host exhibido a ModelsPage (ViewController/Page pattern) */
+    /** Contrato que el importer usa para tocar la UI. */
+    private val drawFileImportHost: DrawFileImportHost = object : DrawFileImportHost {
+        // Todas las referencias al Activity van calificadas con this@MainActivity:
+        // dentro de un objeto anonimo, un `this` sin calificar es el propio objeto.
+        override fun setBusy(busy: Boolean) = this@MainActivity.applyBusy(busy)
+        override fun setDrawBusy(busy: Boolean) = this@MainActivity.setDrawBusy(busy)
+        override fun showDrawProgress(show: Boolean) = this@MainActivity.showDrawProgress(show)
+        override fun setStatus(text: String, color: Int) = this@MainActivity.setStatus(text, color)
+        override fun toast(msg: String) = this@MainActivity.toast(msg)
+        override fun busyMessage(): String = getString(R.string.s_131)
+        override fun errorMessage(): String = getString(R.string.s_158)
+        override fun okColor(): Int = C_OK
+        override fun errColor(): Int = C_ERR
+        override fun warnColor(): Int = C_WARN
+    }
+
+    /**
+     * Importacion de ficheros de dibujo (LoRA / modelo del tagger / tabla de tags).
+     * Unifica los tres handlers que eran copias del mismo codigo.
+     */
+    private val drawFileImporter: DrawFileImporter<Uri> = DrawFileImporter(scope, drawFileImportHost)
+
     private fun createModelsPageHost(): ModelsHost {
         return object : ModelsHost {
             override val activity: Activity get() = this@MainActivity
@@ -1189,6 +1233,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             override fun onToggleDrawSlots() = this@MainActivity.toggleDrawSlots()
             override fun onDrawToggleClickRequested() = this@MainActivity.onDrawToggleClick()
             override fun onPickLoraSource() = this@MainActivity.pickLoraSource()
+            override fun onPickTaesdSource() = this@MainActivity.pickTaesdSource()
             override fun onPickLoraFile() = this@MainActivity.pickLoraFile()
             override fun onConfirmDeleteLora() = this@MainActivity.confirmDeleteLora()
             override fun onPickTaggerOnnx() = this@MainActivity.pickTaggerOnnx()
@@ -1423,85 +1468,6 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         drawerOpen = false
     }
 
-    private fun buildInputBar(): View {
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(C_CARD)
-            setPadding(dp(10), dp(4), dp(10), dp(8))
-            elevation = dp(6).toFloat()
-        }
-
-        thinkCheck = CheckBox(this).apply {
-            text = getString(R.string.s_105)
-            textSize = 12.5f
-            setTextColor(C_TEXT)
-            isChecked = chatPrefs().getBoolean(KEY_CHAT_THINK, true)
-            buttonTintList = ColorStateList.valueOf(C_PRIMARY)
-            setOnCheckedChangeListener { _, v -> chatPrefs().edit().putBoolean(KEY_CHAT_THINK, v).apply() }
-        }
-        bar.addView(thinkCheck, matchWrap())
-
-        // 待发送图片预览条（横向可滚动，每张一个小缩略图 + 右上角 ×）
-        attachPreviewStrip = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            visibility = View.GONE
-            setPadding(0, dp(2), 0, dp(6))
-        }
-        attachPreviewBox = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        attachPreviewStrip.addView(attachPreviewBox)
-        bar.addView(attachPreviewStrip, matchWrap())
-
-        // 预览条的重建逻辑在 AttachmentHandler（增删附件后自动刷新）
-        attachmentHandler.attachViews(attachPreviewStrip, attachPreviewBox)
-
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
-        }
-
-        inputEdit = EditText(this).apply {
-            hint = getString(R.string.s_180)
-            textSize = 15f
-            setTextColor(C_TEXT)
-            setHintTextColor(C_HINT)
-            background = rounded(C_SOFT_BTN, 20)
-            setPadding(dp(16), dp(10), dp(16), dp(10))
-            inputType = InputType.TYPE_CLASS_TEXT or
-                InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            minLines = 1
-            maxLines = 5
-            gravity = Gravity.TOP or Gravity.START
-        }
-        row.addView(inputEdit, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-
-        attachButton = TextView(this).apply {
-            text = "＋"
-            textSize = 20f
-            setTextColor(C_PRIMARY)
-            gravity = Gravity.CENTER
-            background = rounded(C_PRIMARY_SOFT, 22)
-            isClickable = true
-            setOnClickListener { onAttachClick() }
-        }
-        row.addView(attachButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(8) })
-
-        sendButton = TextView(this).apply {
-            text = "↑"
-            textSize = 19f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            background = rounded(C_PRIMARY, 22)
-            isClickable = true
-            setOnClickListener { onSendOrStop() }
-        }
-        row.addView(sendButton, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(8) })
-        bar.addView(row, matchWrap())
-        return bar
-    }
 
     // ================= 聊天发图（.litertlm 多模态） =================
 
@@ -1689,12 +1655,6 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
      * 估算 LiteRT 会话的输入 token：系统提示 + 历史 + 本轮要发的内容。
      * 历史里之前发过的文件正文也还留在引擎的上下文里，所以一并算上。
      */
-    private fun estimateConversationTokens(s: ChatSession, extra: String, dropLast: Boolean): Float =
-        chatManager.estimateConversationTokens(
-            session = s, extra = extra, dropLast = dropLast,
-            canDrawFromChat = canDrawFromChat, drawToolPrompt = drawToolPrompt
-        )
-
     /** 判断是不是「上下文塞不下」这类错误（LiteRT Status Code 3 / llama.cpp 的 context 满） */
     internal fun isContextOverflow(e: Throwable): Boolean {
         val m = (e.message ?: "").lowercase()
@@ -2041,85 +2001,43 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     private fun handlePickedLora(data: Intent?) {
         val uri = data?.data ?: return
         val dpg = drawPage ?: return
-        applyBusy(true)
-        setDrawBusy(true)
-        showDrawProgress(true)
-        setStatus(getString(R.string.s_131), C_WARN)
-        scope.launch {
-            val err = dpg.importLoraFile(
-                uri,
-                onStage = { stage -> loraStatusTv?.text = stage },
-                onProgress = { done, total -> updateDrawProgress(done, total) }
-            )
-            applyBusy(false)
-            setDrawBusy(false)
-            showDrawProgress(false)
-            if (err == null) {
-                setStatus(getString(R.string.s_220), C_OK)
-                toast(getString(R.string.s_220))
-            } else {
-                setStatus(getString(R.string.s_158), C_ERR)
-                toast(err)
-            }
-            refreshLoraUi()
-        }
-    
+        drawFileImporter.import(
+            uri = uri,
+            importFile = { u, onStage, onProgress -> dpg.importLoraFile(u, onStage, onProgress) },
+            onStage = { stage -> loraStatusTv?.text = stage },
+            onProgress = { done, total -> updateDrawProgress(done, total) },
+            onOk = getString(R.string.s_220),
+            onToast = getString(R.string.s_220),
+            refresh = { refreshLoraUi() },
+        )
     }
 
     private fun handlePickedTaggerOnnx(data: Intent?) {
         val uri = data?.data ?: return
         val dpg = drawPage ?: return
-        applyBusy(true)
-        setDrawBusy(true)
-        showDrawProgress(true)
-        setStatus(getString(R.string.s_131), C_WARN)
-        scope.launch {
-            val err = dpg.importTaggerModel(
-                uri,
-                onStage = { stage -> taggerStatusTv?.text = stage },
-                onProgress = { done, total -> updateDrawProgress(done, total) }
-            )
-            applyBusy(false)
-            setDrawBusy(false)
-            showDrawProgress(false)
-            if (err == null) {
-                setStatus(getString(R.string.s_267), C_OK)
-                toast(getString(R.string.s_269))
-            } else {
-                setStatus(getString(R.string.s_158), C_ERR)
-                toast(err)
-            }
-            refreshTaggerUi()
-        }
-    
+        drawFileImporter.import(
+            uri = uri,
+            importFile = { u, onStage, onProgress -> dpg.importTaggerModel(u, onStage, onProgress) },
+            onStage = { stage -> taggerStatusTv?.text = stage },
+            onProgress = { done, total -> updateDrawProgress(done, total) },
+            onOk = getString(R.string.s_267),
+            onToast = getString(R.string.s_269),
+            refresh = { refreshTaggerUi() },
+        )
     }
 
     private fun handlePickedTaggerCsv(data: Intent?) {
         val uri = data?.data ?: return
         val dpg = drawPage ?: return
-        applyBusy(true)
-        setDrawBusy(true)
-        showDrawProgress(true)
-        setStatus(getString(R.string.s_131), C_WARN)
-        scope.launch {
-            val err = dpg.importTaggerCsv(
-                uri,
-                onStage = { stage -> taggerStatusTv?.text = stage },
-                onProgress = { done, total -> updateDrawProgress(done, total) }
-            )
-            applyBusy(false)
-            setDrawBusy(false)
-            showDrawProgress(false)
-            if (err == null) {
-                setStatus(getString(R.string.s_268), C_OK)
-                toast(getString(R.string.s_269))
-            } else {
-                setStatus(getString(R.string.s_158), C_ERR)
-                toast(err)
-            }
-            refreshTaggerUi()
-        }
-    
+        drawFileImporter.import(
+            uri = uri,
+            importFile = { u, onStage, onProgress -> dpg.importTaggerCsv(u, onStage, onProgress) },
+            onStage = { stage -> taggerStatusTv?.text = stage },
+            onProgress = { done, total -> updateDrawProgress(done, total) },
+            onOk = getString(R.string.s_268),
+            onToast = getString(R.string.s_269),
+            refresh = { refreshTaggerUi() },
+        )
     }
 
     /** Models can't be loaded from a content:// URI, so copy them to a real file first. */
@@ -2362,7 +2280,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     }
 
     /** 点击某个模型集 → 只标记为选用，不加载（与对话模型一致，需再点「加载绘图模型」）。 */
-    private fun selectDrawSet(s: DrawPage.ModelSet) {
+    private fun selectDrawSet(s: ModelSet) {
         drawPage?.selectSet(s)
         drawSetId = s.id
         drawModelStatus?.text = drawPage?.modelSummary()
@@ -2405,6 +2323,54 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             }
             .setNegativeButton(getString(R.string.s_066), null)
             .show()
+    }
+
+    /** Fuente para el TAESD: directa o mirror. */
+    private fun pickTaesdSource() {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.s_548))
+            .setItems(arrayOf(getString(R.string.s_028), getString(R.string.s_029))) { _, which ->
+                startTaesdDownload(useMirror = which == 0)
+            }
+            .setNegativeButton(getString(R.string.s_066), null)
+            .show()
+    }
+
+    private fun startTaesdDownload(useMirror: Boolean) {
+        val dpg = drawPage ?: return
+        val src = if (useMirror) "hf-mirror.com" else "huggingface.co"
+        setStatus(getString(R.string.s_549), C_WARN)
+        scope.launch {
+            val err = dpg.downloadTaesd(useMirror) { done, total ->
+                val pct = if (total > 0) ((done * 100) / total).toInt() else -1
+                runOnUiThread {
+                    setStatus(
+                        if (pct >= 0) getString(R.string.v_008, src, pct, UiHelpers.fmtSize(done), UiHelpers.fmtSize(total))
+                        else getString(R.string.v_009, src, UiHelpers.fmtSize(done)),
+                        C_WARN
+                    )
+                }
+            }
+            runOnUiThread {
+                if (err == null) {
+                    // Ofrecer asignarlo al slot "taesd" del set activo de una vez:
+                    // si no, el usuario tiene que buscar el panel de slots a mano.
+                    val assigned = dpg.assignTaesdToActiveSet()
+                    if (assigned) {
+                        toast(getString(R.string.s_552))
+                        setStatus(getString(R.string.s_552), C_OK)
+                        refreshDrawSlots()
+                        drawModelStatus?.text = dpg.modelSummary()
+                    } else {
+                        toast(getString(R.string.s_550))
+                        setStatus(getString(R.string.s_550), C_OK)
+                    }
+                } else {
+                    toast(err)
+                    setStatus(err, C_ERR)
+                }
+            }
+        }
     }
 
     private fun startLoraDownload(useMirror: Boolean) {
@@ -2460,7 +2426,7 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
     }
 
     /** 长按删除一个模型集（连同它的全部文件）。 */
-    private fun confirmDeleteDrawSet(s: DrawPage.ModelSet) {
+    private fun confirmDeleteDrawSet(s: ModelSet) {
         val dpg = drawPage ?: return
         if (dpg.isReady() && dpg.activeSetId() == s.id) {
             toast(getString(R.string.s_172))
@@ -2519,13 +2485,29 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
             .show()
     }
 
+    /**
+     * Activa el log nativo de llama.cpp (ggml). Sin esto, un fallo en el
+     * backend sale como un crash sin contexto: el .so no dice nada.
+     */
+    private fun enableLlamaLog() {
+        try {
+            net.ladenthin.llama.LlamaModel.setLogger(
+                net.ladenthin.llama.args.LogFormat.TEXT
+            ) { _, msg ->
+                Log.i("LlamaCpp", msg)
+            }
+        } catch (_: Throwable) {
+            // Si el runtime no lo soporta, se sigue sin log.
+        }
+    }
+
     private fun toggleLoad() {
         if (engine != null || llamaModel != null) {
             unloadModel()
             return
         }
         val path = modelPath ?: run { toast(getString(R.string.s_175)); return }
-        val isGguf = path.endsWith(".gguf", ignoreCase = true)
+        val isGguf = ModelLoadDecision.isGguf(path)
         val backendName = backendSpinner.selectedItem.toString()
         val thinking = thinkCheck.isChecked
         applyBusy(true)
@@ -2535,18 +2517,29 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
         scope.launch(Dispatchers.IO) {
             try {
                 if (isGguf) {
+                    enableLlamaLog()
                     // llama.cpp：单 slot + cache_prompt。会话内 KV 前缀会被复用，长对话只需计算新增 token。
                     // 线程数走全局设置（「关于 → 设置」），与绘图、打标共用同一个值。
                     val cpus = InferConfig.threads(this@MainActivity)
+                    // 后端选 GPU 时把全部层交给 Vulkan（llama.cpp 用 -1 表示
+                    // "全部"）；二进制没带 Vulkan 后端时 ggml 会静默留在 CPU。
+                    val gpuWanted = ModelLoadDecision.wantsGpu(backendName)
+                    val gpuLayers = ModelLoadDecision.gpuLayers(backendName)
                     val params = ModelLoadSpecs.llamaParams(
                         path = path,
                         ctxSize = chatParams.ctx(),
                         maxOut = chatParams.maxOut(),
                         threads = cpus,
                         mmprojPath = mmprojPath,
+                        gpuLayers = gpuLayers,
+                        cacheTypeK = KvCacheConfig.type(this@MainActivity),
+                        cacheTypeV = KvCacheConfig.type(this@MainActivity),
                     )
                     val m = LlamaModel(params)
                     val vok = try { m.supportsVision() } catch (_: Throwable) { false }
+                    // 运行时确认到底落在哪：getLlamaCppBuildInfo() 会带上编译
+                    // 时的后端列表，"VULKAN" 在里面才说明真的会走 GPU。
+                    val onGpu = ModelLoadDecision.actuallyOnGpu(backendName, GpuSupport.isVulkanBuiltIn())
                     withContext(Dispatchers.Main) {
                         llamaModel = m
                         visionOk = vok
@@ -2558,12 +2551,24 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                         engine = null
                         conversation = null
                         convThinking = null
-                        setStatus(getString(R.string.s_078), C_OK)
-                        if (backendName == "GPU") toast(getString(R.string.s_016))
+                        setStatus(
+                            if (onGpu) getString(R.string.s_078_gpu) else getString(R.string.s_078),
+                            C_OK
+                        )
+                        if (gpuWanted && !onGpu) {
+                        // El motivo importa: sin backend Vulkan en el binario
+                        // es otra cosa que la via experimental todavia
+                        // deshabilitada por el driver.
+                        toast(
+                            getString(
+                                if (GpuSupport.isVulkanBuiltIn()) R.string.s_560 else R.string.s_016
+                            )
+                        )
+                    }
                     }
                 } else {
                     // 后端：选 GPU 时先试 LiteRT 的 GPU 后端；设备/驱动不支持就自动退回 CPU
-                    val gpuWanted = backendName == "GPU"
+                    val gpuWanted = ModelLoadDecision.wantsGpu(backendName)
                     var usedBackendName = backendName
                     // 先读模型自带的 Capabilities：是否为多模态（图文）模型
                     val vok = probeVision(path)

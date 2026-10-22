@@ -3,6 +3,7 @@ package com.yumenode.ai
 
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.EngineConfig
+import net.ladenthin.llama.args.CacheType
 import net.ladenthin.llama.parameters.ModelParameters
 import java.io.File
 
@@ -19,6 +20,12 @@ internal object ModelLoadSpecs {
      *
      * Un solo slot con `cache_prompt`: el prefijo KV de la conversación se
      * reutiliza y los turnos largos solo calculan los tokens nuevos.
+     *
+     * @param gpuLayers cuántas capas se descargan a la GPU. 0 = solo CPU;
+     *   -1 = todas (lo que usa llama.cpp para "gpu layers = all"). Si el
+     *   binario no trae backend Vulkan, ggml lo ignora y sigue en CPU.
+     * @param cacheTypeK cuantización del cache K (F16 = sin cuantizar).
+     * @param cacheTypeV cuantización del cache V.
      */
     fun llamaParams(
         path: String,
@@ -26,6 +33,9 @@ internal object ModelLoadSpecs {
         maxOut: Int,
         threads: Int,
         mmprojPath: String?,
+        gpuLayers: Int = 0,
+        cacheTypeK: CacheType = CacheType.Q8_0,
+        cacheTypeV: CacheType = CacheType.Q8_0,
     ): ModelParameters {
         val params = ModelParameters()
             .setModel(path)
@@ -36,7 +46,13 @@ internal object ModelLoadSpecs {
             .setBatchSize(512)
             .setParallel(1)
             .setKeep(64)
-            .setGpuLayers(0)
+            .setGpuLayers(gpuLayers)
+            // Cuantizar el cache K/V: en F16 ocupa el doble de RAM que en
+            // Q8_0 y no se nota en la calidad. Con contexto largo (32k) la
+            // diferencia es de gigas: es lo que permite que un modelo grande
+            // quepa en un movil.
+            .setCacheTypeK(cacheTypeK)
+            .setCacheTypeV(cacheTypeV)
         // Multimodal: sin el proyector de visión el gguf no acepta imágenes.
         mmprojPath?.let { if (File(it).isFile) params.setMmproj(it) }
         return params

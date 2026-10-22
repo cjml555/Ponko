@@ -93,23 +93,8 @@ class ChatManager(
     /** Estima tokens en un texto (aproximado). Delegado en [TokenEstimator]. */
     fun estTokens(s: String): Float = TokenEstimator.estimate(s)
 
-    /** Recorta texto para no exceder maxTokens */
-    fun fitTokens(text: String, maxTokens: Int): String {
-        if (estTokens(text) <= maxTokens) return text
-        var acc = 0f
-        var cut = text.length
-        for (i in text.indices) {
-            acc += if (text[i].code in 0x1100..0xFFFF) 1f else 0.3f
-            if (acc > maxTokens) {
-                cut = i
-                break
-            }
-        }
-        var body = text.substring(0, cut)
-        val nl = body.lastIndexOf('\n')
-        if (nl > cut / 2) body = body.substring(0, nl)
-        return body
-    }
+    /** Recorta texto para no exceder maxTokens. Delegado en [ContextBudget]. */
+    fun fitTokens(text: String, maxTokens: Int): String = ContextBudget.fitTokens(text, maxTokens)
 
     /**
      * Estima tokens de la conversación completa.
@@ -121,18 +106,10 @@ class ChatManager(
         dropLast: Boolean,
         canDrawFromChat: Boolean,
         drawToolPrompt: String
-    ): Float {
-        var t = 0f
-        if (canDrawFromChat) t += estTokens(drawToolPrompt) + 12f
-        val upto = if (dropLast) session.turns.size - 1 else session.turns.size
-        for (i in 0 until maxOf(upto, 0)) {
-            val tt = session.turns[i]
-            t += estTokens(tt.user) + estTokens(tt.answer) + 12f
-            tt.fileText?.let { t += estTokens(it) }
-        }
-        t += estTokens(extra) + 12f
-        return t
-    }
+    ): Float = ContextBudget.estimateConversationTokens(
+        session = session, extra = extra, dropLast = dropLast,
+        canDrawFromChat = canDrawFromChat, drawToolPrompt = drawToolPrompt,
+    )
 
     /** Borra los adjuntos después del envío */
     fun clearPendingAttachments() {

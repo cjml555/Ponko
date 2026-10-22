@@ -92,6 +92,7 @@ object SdCppEngine {
         flashAttn: Boolean,
         backend: String?,
         slots: Array<String?>?,
+        diskWeights: Boolean,
     ): Long
 
     external fun nativeGenerate(
@@ -113,7 +114,43 @@ object SdCppEngine {
         initWidth: Int,
         initHeight: Int,
         strength: Float,
+        hiresEnabled: Boolean,
+        hiresTargetWidth: Int,
+        hiresTargetHeight: Int,
+        hiresSteps: Int,
+        hiresDenoiseStrength: Float,
+        hiresUpscaler: Int,
+        vaeTilingEnabled: Boolean,
+        vaeTileSize: Int,
+        vaeTileOverlap: Float,
     ): IntArray?
+
+    /** 原生 hires fix 的放大器（对应 sd.cpp 的 sd_hires_upscaler_t）。 */
+    enum class HiresUpscaler(val code: Int, val label: String) {
+        /** 潜空间放大（最省算力，sd.cpp 默认）。 */
+        LATENT(1, "Latent"),
+
+        /** 潜空间最近邻放大。 */
+        LATENT_NEAREST(2, "Latent nearest"),
+
+        /** 潜空间最近邻精确放大。 */
+        LATENT_NEAREST_EXACT(3, "Latent nearest exact"),
+
+        /** 潜空间双线性 + 抗锯齿。 */
+        LATENT_ANTIALIASED(4, "Latent antialiased"),
+
+        /** 潜空间双三次。 */
+        LATENT_BICUBIC(5, "Latent bicubic"),
+
+        /** 潜空间双三次 + 抗锯齿。 */
+        LATENT_BICUBIC_ANTIALIASED(6, "Latent bicubic antialiased"),
+
+        /** 像素空间 Lanczos（先解码 VAE 再放大，质量最高、最慢）。 */
+        LANCZOS(7, "Lanczos"),
+
+        /** 像素空间最近邻。 */
+        NEAREST(8, "Nearest"),
+    }
 
     external fun nativeCancel(handle: Long)
 
@@ -156,7 +193,8 @@ object SdCppEngine {
         flashAttn: Boolean = true,
         backend: String? = null,
         slots: Array<String?>? = null,
-    ): Long = nativeCreate(modelPath, vaePath, nThreads, wtype, flashAttn, backend, slots)
+        diskWeights: Boolean = true,
+    ): Long = nativeCreate(modelPath, vaePath, nThreads, wtype, flashAttn, backend, slots, diskWeights)
 
     /**
      * 槽位顺序（与 JNI 里的 SlotIndex 一一对应；sd.cpp 的 sd_ctx_params_t 路径字段）。
@@ -204,9 +242,21 @@ object SdCppEngine {
         initWidth: Int = 0,
         initHeight: Int = 0,
         strength: Float = 1.0f,
+        // ---- 原生 hires fix（sd.cpp 内部实现）----
+        hiresEnabled: Boolean = false,
+        hiresTargetWidth: Int = 0,
+        hiresTargetHeight: Int = 0,
+        hiresSteps: Int = 0,
+        hiresDenoiseStrength: Float = 0.7f,
+        hiresUpscaler: HiresUpscaler = HiresUpscaler.LATENT,
+        // ---- VAE tiling（分块编解码，省内存）----
+        vaeTilingEnabled: Boolean = false,
+        vaeTileSize: Int = 512,
+        vaeTileOverlap: Float = 0.25f,
     ): Bitmap? {
         val effectiveSeed = if (seed < 0) (System.currentTimeMillis() % 1_000_000_000L) else seed
         val useInit = initImage != null && initImage.isNotEmpty() && initWidth > 0 && initHeight > 0
+        val useHires = hiresEnabled && hiresTargetWidth > 0 && hiresTargetHeight > 0
         val px = nativeGenerate(
             handle, prompt, negative, loraPath, loraScale,
             width, height, steps, cfg, effectiveSeed,
@@ -215,9 +265,22 @@ object SdCppEngine {
             if (useInit) initWidth else 0,
             if (useInit) initHeight else 0,
             if (useInit) strength else 1.0f,
+            useHires,
+            if (useHires) hiresTargetWidth else 0,
+            if (useHires) hiresTargetHeight else 0,
+            if (useHires) hiresSteps else 0,
+            if (useHires) hiresDenoiseStrength else 0.7f,
+            if (useHires) hiresUpscaler.code else 0,
+            vaeTilingEnabled,
+            vaeTileSize,
+            vaeTileOverlap,
         ) ?: return null
         if (px.isEmpty()) return null
-        return Bitmap.createBitmap(px, width, height, Bitmap.Config.ARGB_8888)
+        // hires 时出的是目标尺寸，数组按目标尺寸排布
+        val outW = if (useHires) hiresTargetWidth else width
+        val outH = if (useHires) hiresTargetHeight else height
+        if (px.size < outW * outH) return null
+        return Bitmap.createBitmap(px, outW, outH, Bitmap.Config.ARGB_8888)
     }
 
         /** 预览小图（RGB888）→ Bitmap（ARGB_8888）；非法输入返回 null */

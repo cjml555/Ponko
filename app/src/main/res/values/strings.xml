@@ -16,7 +16,7 @@
 <string name="s_013">CFG scale</string>
 <string name="s_014">Discrete is the standard choice; Karras pairs with the DPM++ family; LCM goes with the LCM sampler</string>
 <string name="s_015">Euler a is the safest all-rounder; LCM / TCD are the few-step acceleration samplers for LoRA; DPM++ 2M / 2M SDE give more detail but are slower (DPM++ 2M SDE pairs well with the Karras scheduler)</string>
-<string name="s_016">GGUF runs on CPU for now (this runtime has no GPU backend)</string>
+<string name="s_016">This runtime has no Vulkan backend: the model stays on CPU</string>
 <string name="s_017">LCM-LoRA is a tens-of-MB \"distillation patch\". Attached to the main model it cuts 20 steps down to 4-8 (~5x faster) without touching the model file.</string>
 <string name="s_018">Downloading LoRA…</string>
 <string name="s_019">LoRA download failed</string>
@@ -76,6 +76,7 @@
 <string name="s_076">Chat model</string>
 <string name="s_077">Chat model loaded. If a draw model is loaded too, just say \"draw a ...\" and it will be used; otherwise use the Draw page.</string>
 <string name="s_078">Chat model loaded (llama.cpp · CPU · KV reuse)</string>
+<string name="s_078_gpu">Chat model loaded (llama.cpp · Vulkan GPU · KV reuse)</string>
 <string name="s_079">Chat model unloaded</string>
 <string name="s_080">Chat model unloaded.</string>
 <string name="s_081">Ready</string>
@@ -197,6 +198,14 @@
 <string name="s_201">+ New chat</string>
 <string name="s_202">🎨 Generating image…</string>
 <string name="s_203">🖼️ Result</string>
+<string name="s_529">Upscale strength</string>
+<string name="s_530">%1$s</string>
+<string name="s_531">Lower = closer to the original (0.05–0.99). 0.35 is a good starting point: same composition, more detail.</string>
+<string name="s_524">Upscale (2×)</string>
+<string name="s_525">Upscaling…</string>
+<string name="s_526">Upscaled: %1$d×%2$d</string>
+<string name="s_527">Upscale failed: %1$s</string>
+<string name="s_528">Upscale re-draws the current image at 2× resolution with low denoise strength, so the composition stays and the detail improves.</string>
 <string name="s_204">🤔 Switched to thinking mode (session rebuilt, history kept)</string>
 <string name="s_205">🤔 Reasoning (tap to expand)</string>
 <string name="s_206">🤔 Reasoning (tap to collapse)</string>
@@ -545,7 +554,14 @@
     <string name="s_511">Images</string>
     <string name="s_513">No models in this category yet</string>
 
-    <string name="s_514">Device</string>
+    <string name="s_560">GPU acceleration for GGUF is still experimental and is off for now: the driver can crash the app. The model runs on CPU.</string>
+    <string name="s_555">Drawing memory mode</string>
+    <string name="s_556">High speed</string>
+    <string name="s_557">Low memory</string>
+    <string name="s_558">Low memory loads the text encoder, the UNet and the VAE one at a time, so only one of them is in RAM. A big model fits on a phone; it can be slower if the system has to reload pages from storage. Applies the next time the model is loaded.</string>
+    <string name="s_553">KV cache quantization (GGUF)</string>
+    <string name="s_554">%1$s · applies the next time the model is loaded</string>
+<string name="s_514">Device</string>
     <string name="s_515">SoC</string>
     <string name="s_516">Cores</string>
     <string name="s_518">Vulkan</string>
@@ -554,4 +570,25 @@
 
     <string name="s_522">LoRA</string>
     <string name="s_523">Distilled model: %1$d steps · CFG 1</string>
+    <string name="s_532">Size preset</string>
+    <string name="s_533">Custom</string>
+    <string name="s_534">Custom size (px)</string>
+    <string name="s_535">Width and height must be multiples of 64 (they are rounded down automatically). 512x512 is the native SD1.5 resolution; 256 is much faster and good for a first try.</string>
+    <string name="s_536">Cancel generation</string>
+    <string name="s_537">Cancel the running generation. It takes effect after the current step finishes.</string>
+    <string name="s_538">Redraw (img2img)</string>
+    <string name="s_539">Native hi-res fix</string>
+    <string name="s_540">Upscale method</string>
+    <string name="s_541">Redraw uses the image as an img2img reference: the prompt is re-consumed and the composition may shift. Native hi-res fix runs inside stable-diffusion.cpp: it upscales the latent and denoises a second time, so the composition stays put and no extra prompt tokens are spent.</string>
+    <string name="s_542">Upscaler</string>
+    <string name="s_543">Latent upscaling runs in latent space (cheapest). Lanczos decodes to pixels first (sharpest, slowest).</string>
+    <string name="s_544">VAE tiling</string>
+    <string name="s_545">Decode the image in blocks instead of all at once. Large images need hundreds of MB to decode in one piece; tiling keeps the memory peak tied to the block size instead. Slightly slower, but it lets you generate big images on a phone with little RAM.</string>
+    <string name="s_546">Block size (px)</string>
+    <string name="s_547">Overlap between blocks (0–0.5). Higher values reduce visible seams but need more memory.</string>
+    <string name="s_548">Download TAESD (fast decoder)</string>
+    <string name="s_549">Downloading TAESD…</string>
+    <string name="s_550">TAESD downloaded. Assign it to the &quot;taesd&quot; slot of your model set, then reload the model: it replaces the full VAE and decodes much faster on CPU.</string>
+    <string name="s_551">TAESD (tiny autoencoder) is a distilled mini VAE. It decodes the latent into pixels far faster than the full VAE, which is what dominates the wait on a phone. The file is about 5 MB. Note: it is only for SD1.x/SD2.x models; SDXL needs TAESDXL, which the app does not download yet.</string>
+    <string name="s_552">TAESD downloaded and assigned to the &quot;taesd&quot; slot. Reload the model to use it: decoding gets much faster on CPU.</string>
 </resources>

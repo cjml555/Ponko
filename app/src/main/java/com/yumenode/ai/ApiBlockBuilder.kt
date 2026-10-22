@@ -53,6 +53,12 @@ class ApiBlockBuilder(
     private val onRefreshSurfaces: () -> Unit,
 ) {
 
+    /** MATCH_PARENT x WRAP_CONTENT (helper de Context, reutilizado aqui). */
+    private fun matchWrap() = with(activity) { matchWrap() }
+
+    /** WRAP_CONTENT x WRAP_CONTENT (helper de Context, reutilizado aqui). */
+    private fun wrapWrap() = with(activity) { wrapWrap() }
+
     fun build(
         role: ApiServer.Role,
         extraAfterAddress: List<View> = emptyList(),
@@ -182,17 +188,6 @@ class ApiBlockBuilder(
             .coerceIn(1024, 65535)
 
     private fun dp(v: Int): Int =
-        (v * activity.resources.displayMetrics.density).toInt()
+        UiScale.dpToPx(v, activity.resources.displayMetrics.density)
 
-    private fun matchWrap(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-        )
-
-    private fun wrapWrap(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-        )
 }

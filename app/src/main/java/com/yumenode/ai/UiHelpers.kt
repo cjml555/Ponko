@@ -22,11 +22,10 @@ class UiHelpers {
         }
 
         /**
-         * DP to pixel conversion helper
+         * DP to pixel conversion helper (truncando; ver [UiScale]).
          */
-        fun dp(value: Int, context: Context): Int {
-            return (value * context.resources.displayMetrics.density).toInt()
-        }
+        fun dp(value: Int, context: Context): Int =
+            UiScale.dpToPx(value, context.resources.displayMetrics.density)
 
         /** Number input field helper */
         fun numField(
@@ -84,8 +83,8 @@ class UiHelpers {
             return layout
         }
 
-        /** Hint text helper */
-        fun hintTextView(context: Context, text: String, palette: () -> YumenodeTheme): TextView = TextView(context).apply {
+        /** Hint text helper (uso interno de [numField]). */
+        private fun hintTextView(context: Context, text: String, palette: () -> YumenodeTheme): TextView = TextView(context).apply {
             this.text = text
             textSize = 10.5f
             setTextColor(palette().subText)

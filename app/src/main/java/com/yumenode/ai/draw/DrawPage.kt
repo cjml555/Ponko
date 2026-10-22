@@ -2,6 +2,7 @@
 package com.yumenode.ai.draw
 
 import com.yumenode.ai.DrawCore
+import com.yumenode.ai.DrawMemoryMode
 import com.yumenode.ai.InferConfig
 import com.yumenode.ai.YumenodeTheme
 import com.yumenode.ai.R
@@ -17,6 +18,7 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -29,6 +31,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Toast
 import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
@@ -38,6 +41,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.math.roundToInt
 
 /** 用户主动中断生成时抛出（与真正的失败区分开）。消息不面向用户，用固定英文。 */
 class GenerationCancelledException : RuntimeException("Generation cancelled")
@@ -81,8 +85,24 @@ class DrawPage(
         const val DIR_NAME = "draw"
         /** 打标模型/标签表目录：filesDir/tagger */
         const val TAGGER_DIR = "tagger"
+
+        /** 尺寸预设（方形，px）。sd.cpp 要求 64 的倍数，这里全是对齐的。 */
+        private val SIZE_PRESETS = listOf(64, 128, 256, 384, 512)
         private const val REQ_IMAGE = 0x5D02
         private const val REQ_TAGGER_IMAGE = 0x5D03
+
+        /**
+         * TAESD（Tiny AutoEncoder）：蒸馏过的迷你 VAE，替代完整 VAE 做编解码。
+         * En CPU es MUCH más rápido que el VAE completo (un orden de magnitud menos
+         * de cómputo) y usa mucho menos pico de memoria.
+         * El archivo diffusion_pytorch_model.safetensors trae encoder + decoder juntos,
+         * que es lo que espera sd.cpp en el slot taesd (prefijo "tae.").
+         */
+        private const val TAESD_HF_PATH =
+            "madebyollin/taesd/resolve/main/diffusion_pytorch_model.safetensors"
+
+        /** Tamaño mínimo razonable del archivo TAESD (fuente única: [ModelSetStore]) */
+        private const val TAESD_MIN_BYTES = ModelSetStore.TAESD_MIN_BYTES
 
         /** LCM-LoRA：HuggingFace 官方仓库路径（文件实名为 pytorch_lora_weights.safetensors） */
         private const val LORA_HF_PATH =
@@ -91,12 +111,9 @@ class DrawPage(
         /** 下载后重命名成这个，prompt 里就用 `lora:lcm-lora-sdv1-5:1` 引用 */
         const val LORA_NAME = "lcm-lora-sdv1-5"
 
-        /** 模型集偏好键（当前选中的模型集 id） */
-        private const val KEY_SEL_SET = "selSet"
-
-        /** 单文件 / 多文件 */
-        const val KIND_SINGLE = "single"
-        const val KIND_MULTI = "multi"
+        /** 单文件 / 多文件（fuente única: [ModelSetStore]) */
+        const val KIND_SINGLE = ModelSetStore.KIND_SINGLE
+        const val KIND_MULTI = ModelSetStore.KIND_MULTI
 
         /** 家族 id */
         const val FAM_SD15 = "sd15"
@@ -183,6 +200,17 @@ class DrawPage(
         private const val KEY_CFG = "drawCfg"
         private const val KEY_SEED = "drawSeed"
         private const val KEY_LORA_SCALE = "drawLoraScale"
+        private const val KEY_UPSCALE_STRENGTH = "upscaleStrength"
+        /** 放大方式：0 = 图生图重绘，1 = sd.cpp 原生 hires fix */
+        private const val KEY_UPSCALE_MODE = "upscaleMode"
+        /** 原生 hires fix 的放大器索引 */
+        private const val KEY_UPSCALE_UPSCALER = "upscaleUpscaler"
+        /** VAE tiling（分块编解码）开关 */
+        private const val KEY_VAE_TILING = "vaeTiling"
+        /** VAE tiling 的块大小（px） */
+        private const val KEY_VAE_TILE_SIZE = "vaeTileSize"
+        /** VAE tiling 的块重叠（0–0.5） */
+        private const val KEY_VAE_TILE_OVERLAP = "vaeTileOverlap"
         private const val KEY_SAMPLER = "drawSampler"
         private const val KEY_SCHEDULER = "drawScheduler"
 
@@ -212,6 +240,12 @@ class DrawPage(
 
     /** 当前模型集（单文件 = 只填主模型；多文件 = 主模型 + 各槽位配套文件） */
     private var activeSet: ModelSet? = null
+
+    /**
+     * Persistencia de los model sets (JSON en files/draw/sets + ficheros sueltos).
+     * Extraido de esta clase para que la logica de disco quede testeable en JVM.
+     */
+    private val setStore: ModelSetStore = ModelSetStore(c.filesDir, prefs())
     /** 下一个要导入的类型（由「模型」页的类型菜单设定） */
     var pendingKind: String = KIND_SINGLE
     var pendingFamily: String = FAM_SD15
@@ -252,6 +286,18 @@ class DrawPage(
     /** 当前选中的 LoRA（null = 自动取目录里第一个） */
     private var loraFile: File? = null
 
+    /**
+     * Catalogo de LoRA descargadas/importadas.
+     * Extraido de esta clase para que la regla de seleccion quede testeable.
+     */
+    private val loraStore: LoraStore = LoraStore(c.filesDir, prefs())
+
+    /**
+     * Catalogo del tagger (modelo ONNX + tabla de tags) y decision de recarga.
+     * Extraido de esta clase para que ambas reglas queden testeables.
+     */
+    private val taggerStore: TaggerStore = TaggerStore(c.filesDir, prefs())
+
     /** SD 管线就绪时回调（MainActivity 借此切到绘图模式） */
     var onPipelineReady: (() -> Unit)? = null
 
@@ -269,17 +315,15 @@ class DrawPage(
         val lora = if (useLora) activeLora() else null
         DrawCore.updateParams(
             DrawCore.Params(
-                steps = stepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20,
-                cfg = cfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f,
-                width = (widthEdit.text.toString().toIntOrNull() ?: 512)
-                    .let { (it / 64) * 64 }.coerceIn(64, 2048),
-                height = (heightEdit.text.toString().toIntOrNull() ?: 512)
-                    .let { (it / 64) * 64 }.coerceIn(64, 2048),
+                steps = DrawParamsLogic.steps(stepsEdit.text.toString()),
+                cfg = DrawParamsLogic.cfg(cfgEdit.text.toString()),
+                width = DrawParamsLogic.size(widthEdit.text.toString()),
+                height = DrawParamsLogic.size(heightEdit.text.toString()),
                 negative = negEdit.text.toString(),
                 sampler = pickSampler(lora != null),
                 scheduler = pickScheduler(lora != null),
                 loraPath = lora?.absolutePath,
-                loraScale = loraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f,
+                loraScale = DrawParamsLogic.loraScale(loraScaleEdit.text.toString()),
             )
         )
     }
@@ -305,6 +349,14 @@ class DrawPage(
     // 宽 / 高（可自由填，sd.cpp 要求 64 的倍数）
     private lateinit var widthEdit: EditText
     private lateinit var heightEdit: EditText
+    /** 预设尺寸按钮组：点一下就把 width/height 两个输入框填成对应值 */
+    private val sizePresetButtons = mutableListOf<android.widget.Button>()
+    /** 当前选中的预设尺寸（0 = 自定义）；null 表示尺寸跟预设不一致 */
+    private var selectedSizePreset: Int? = null
+    /** 自定义尺寸行：只有选「Personalizado」时才显示 */
+    private var customSizeRow: View? = null
+    /** 程序化改宽高时置 true，免得 watcher 把预设高亮清掉 */
+    private var suppressPresetSync = false
 
     // 采样器 / 调度器（第 0 项 = 自动）
     private lateinit var samplerSpinner: android.widget.Spinner
@@ -323,7 +375,26 @@ class DrawPage(
     // 结果面板
     private lateinit var resultImg: ImageView
     private lateinit var resultInfo: TextView
+    /** 取消按钮（pestaña Resultado）：只在出图中显示，平时隐藏 */
+    private lateinit var resultCancelBtn: Button
+    /** 放大进度条（pestaña Resultado）：只在放大中显示 */
+    private lateinit var upscaleProgressBar: ProgressBar
+    /** 放大进度文字（pestaña Resultado） */
+    private lateinit var upscaleProgressText: TextView
+    /** 放大方式：0 = 图生图重绘，1 = sd.cpp 原生 hires fix */
+    private lateinit var upscaleModeSpinner: android.widget.Spinner
+    /** 原生 hires fix 用的放大器 */
+    private lateinit var upscaleUpscalerSpinner: android.widget.Spinner
+    /** VAE tiling 开关 */
+    private lateinit var vaeTilingCheck: CheckBox
+    /** VAE tiling 的块大小 */
+    private lateinit var vaeTileSizeEdit: EditText
+    /** VAE tiling 的块重叠 */
+    private lateinit var vaeTileOverlapEdit: EditText
     private lateinit var saveBtn: Button
+    private lateinit var upscaleBtn: Button
+    private lateinit var upscaleStrengthBar: SeekBar
+    private lateinit var upscaleStrengthText: TextView
     private lateinit var historyRow: LinearLayout
     private lateinit var histEmpty: TextView
 
@@ -513,11 +584,10 @@ class DrawPage(
         val paramCard = card()
         paramCard.addView(title(c.getString(R.string.s_065)))
 
-        // 尺寸：宽 × 高，自由填（sd.cpp 要求 64 的倍数）——从上次的值恢复
+        // 尺寸：预设按钮组（64→512 + Personalizado），选预设直接填宽高
         widthEdit = smallNumber(loadParam(KEY_W, defOf("t2i", "w", "512")))
         heightEdit = smallNumber(loadParam(KEY_H, defOf("t2i", "h", "512")))
-        paramCard.addView(whRow(c.getString(R.string.s_070),
-            c.getString(R.string.s_068), widthEdit, heightEdit))
+        paramCard.addView(sizePresetRow())
 
         // 采样器 / 调度器
         samplerSpinner = choiceSpinner(
@@ -569,6 +639,28 @@ class DrawPage(
         loraScaleEdit = smallNumber(loadParam(KEY_LORA_SCALE, defOf("t2i", "loraScale", "1.0")))
         bindParam(loraScaleEdit, KEY_LORA_SCALE)
         paramCard.addView(paramRow(c.getString(R.string.s_024), loraScaleEdit, c.getString(R.string.s_037)))
+        // ---- VAE tiling：分块编解码（大图省内存）----
+        vaeTilingCheck = CheckBox(c).apply {
+            text = c.getString(R.string.s_544)
+            textSize = 13f
+            setTextColor(textColor)
+            isChecked = loadParam(KEY_VAE_TILING, "0") == "1"
+            setPadding(0, c.dp(10), 0, 0)
+            setOnCheckedChangeListener { _, checked ->
+                prefs().edit().putString(KEY_VAE_TILING, if (checked) "1" else "0").apply()
+                refreshVaeTilingRows()
+            }
+        }
+        paramCard.addView(vaeTilingCheck)
+        vaeTileSizeEdit = smallNumber(loadParam(KEY_VAE_TILE_SIZE, "512"))
+        vaeTileOverlapEdit = smallNumber(loadParam(KEY_VAE_TILE_OVERLAP, "0.25"))
+        bindParam(vaeTileSizeEdit, KEY_VAE_TILE_SIZE)
+        bindParam(vaeTileOverlapEdit, KEY_VAE_TILE_OVERLAP)
+        val vaeTileSizeRow = paramRow(c.getString(R.string.s_546), vaeTileSizeEdit, c.getString(R.string.s_545))
+        val vaeTileOverlapRow = paramRow(c.getString(R.string.s_547), vaeTileOverlapEdit, "")
+        paramCard.addView(vaeTileSizeRow)
+        paramCard.addView(vaeTileOverlapRow)
+
         loraHint = TextView(c).apply {
             textSize = 11f
             setTextColor(subText)
@@ -663,6 +755,28 @@ class DrawPage(
             text = c.getString(R.string.s_184)
         }
         resultCard.addView(resultInfo)
+
+        // 取消生成：出图中才出现（平时隐藏），点一下打断 native 推理
+        resultCancelBtn = Button(c).apply {
+            text = c.getString(R.string.s_536)
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            setBackgroundColor(pal.stop)
+            typeface = Typeface.DEFAULT_BOLD
+            visibility = View.GONE
+            setOnClickListener {
+                doCancel()
+                c.toast(c.getString(R.string.s_125), short = true)
+            }
+        }
+        resultCard.addView(resultCancelBtn, c.matchWrap(top = 8))
+        resultCard.addView(TextView(c).apply {
+            text = c.getString(R.string.s_537)
+            textSize = 10.5f
+            setTextColor(subText)
+            setPadding(0, c.dp(3), 0, 0)
+        })
+
         saveBtn = Button(c).apply {
             text = c.getString(R.string.s_045)
             setBackgroundColor(primary)
@@ -673,6 +787,95 @@ class DrawPage(
                 if (b == null) c.toast(c.getString(R.string.s_183), short = true) else onSaveImage?.invoke(b, saveName())
             }
         }
+
+        // 放大（2×）：用「图生图」通道把这张图当参考图重绘，构图不变、细节更细
+        upscaleBtn = Button(c).apply {
+            text = c.getString(R.string.s_524)
+            textSize = 13f
+            setTextColor(primary)
+            setBackgroundColor(pal.primarySoft)
+            typeface = Typeface.DEFAULT_BOLD
+            setOnClickListener { upscaleLast() }
+        }
+        resultCard.addView(upscaleBtn, c.matchWrap(top = 10))
+
+        // 放大进度：条 + 文字（只在放大过程中显示）
+        upscaleProgressText = TextView(c).apply {
+            textSize = 11.5f
+            setTextColor(subText)
+            visibility = View.GONE
+            setPadding(0, c.dp(6), 0, 0)
+        }
+        resultCard.addView(upscaleProgressText, c.matchWrap(top = 8))
+        upscaleProgressBar = ProgressBar(c, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            visibility = View.GONE
+            progressTintList = android.content.res.ColorStateList.valueOf(primary)
+        }
+        resultCard.addView(upscaleProgressBar, c.matchWrap(top = 4))
+
+        // 放大强度：SeekBar（0.05–0.99），值实时显示在右侧
+        val strengthRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+        strengthRow.addView(smallLabel(c.getString(R.string.s_529)), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        upscaleStrengthText = TextView(c).apply {
+            textSize = 12f
+            setTextColor(primary)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.END
+        }
+        strengthRow.addView(upscaleStrengthText, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        resultCard.addView(strengthRow, c.matchWrap(top = 10))
+
+        upscaleStrengthBar = SeekBar(c).apply {
+            max = 94              // 0.05 → 0.99, paso 0.01
+            // roundToInt, no toInt: 0.35f * 100 = 34.999… y toInt() trunca a 34 (→ 0.34)
+            progress = ((loadParam(KEY_UPSCALE_STRENGTH, "0.35").toFloatOrNull() ?: 0.35f) * 100f).roundToInt() - 5
+            progressTintList = android.content.res.ColorStateList.valueOf(primary)
+            thumbTintList = android.content.res.ColorStateList.valueOf(primary)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+                    updateUpscaleStrengthLabel()
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {
+                    val v = (sb?.progress ?: 0) / 100f + 0.05f
+                    prefs().edit().putString(KEY_UPSCALE_STRENGTH, v.toString()).apply()
+                }
+            })
+        }
+        resultCard.addView(upscaleStrengthBar, c.matchWrap(top = 4))
+        resultCard.addView(TextView(c).apply {
+            text = c.getString(R.string.s_531)
+            textSize = 10.5f
+            setTextColor(subText)
+            setPadding(0, c.dp(3), 0, 0)
+        })
+        updateUpscaleStrengthLabel()
+
+        // 放大方式：图生图重绘（img2img）还是 sd.cpp 原生 hires fix
+        upscaleModeSpinner = choiceSpinner(
+            listOf(c.getString(R.string.s_538), c.getString(R.string.s_539))
+        )
+        upscaleModeSpinner.setSelection(
+            loadInt(KEY_UPSCALE_MODE, 1).coerceIn(0, 1), false)
+        upscaleModeSpinner.onItemSelectedListener = persistSpinner(KEY_UPSCALE_MODE)
+        resultCard.addView(
+            paramRow(c.getString(R.string.s_540), upscaleModeSpinner, c.getString(R.string.s_541)),
+            c.matchWrap(top = 10)
+        )
+
+        // 原生 hires fix 的放大器（只有选了 hires nativo才有意义，先按 upscaler 列表给全）
+        upscaleUpscalerSpinner = choiceSpinner(
+            SdCppEngine.HiresUpscaler.entries.map { it.label })
+        upscaleUpscalerSpinner.setSelection(
+            loadInt(KEY_UPSCALE_UPSCALER, 0).coerceIn(0, SdCppEngine.HiresUpscaler.entries.size - 1), false)
+        upscaleUpscalerSpinner.onItemSelectedListener = persistSpinner(KEY_UPSCALE_UPSCALER)
+        resultCard.addView(
+            paramRow(c.getString(R.string.s_542), upscaleUpscalerSpinner, c.getString(R.string.s_543)),
+            c.matchWrap(top = 10)
+        )
+
         resultCard.addView(saveBtn, c.matchWrap(top = 10))
 
         // 结果图一键送去「图生图」当参考图，或送去「Tagger」当输入图
@@ -759,6 +962,7 @@ class DrawPage(
 
         refreshLoraHint()
         refreshQuantText()
+        refreshVaeTilingRows()
         switchMode(0)
         switchPane(toResult = false)
         switchResultPage(0)
@@ -1067,8 +1271,8 @@ class DrawPage(
             c.toast(c.getString(R.string.s_214), short = true)
             return
         }
-        val threshold = taggerThresholdEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.35f
-        val topK = taggerTopKEdit.text.toString().toIntOrNull()?.coerceIn(1, 300) ?: 40
+        val threshold = DrawParamsLogic.taggerThreshold(taggerThresholdEdit.text.toString())
+        val topK = DrawParamsLogic.taggerTopK(taggerTopKEdit.text.toString())
         taggerRunBtn.isEnabled = false
         taggerProgressText.visibility = View.VISIBLE
         taggerProgressText.text = c.getString(R.string.s_229)
@@ -1112,12 +1316,17 @@ class DrawPage(
     private fun ensureTaggerLoaded(): String? {
         val model = taggerModelFile() ?: return c.getString(R.string.s_228)
         val csv = taggerCsvFile() ?: return c.getString(R.string.s_228)
-        val (mName, cName) = TaggerEngine.fileNames()
-        if (TaggerEngine.isLoaded() && mName == model.name && cName == csv.name &&
-            TaggerEngine.loadedWithGpu() == useGpu) return null
+        val sel = TaggerSelection(model.name, csv.name, useGpu)
+        if (sel.isReadyWith(currentTaggerSession())) return null
         // 线程数走全局设置（InferConfig）——与对话 gguf、打标共用同一个值
         val threads = InferConfig.threads(c)
         return TaggerEngine.load(c, model, csv, useGpu, threads)
+    }
+
+    /** Estado del tagger en memoria (lo que hay cargado ahora mismo). */
+    private fun currentTaggerSession(): TaggerSession {
+        val (mName, cName) = TaggerEngine.fileNames()
+        return TaggerSession(TaggerEngine.isLoaded(), mName, cName, TaggerEngine.loadedWithGpu())
     }
 
     /**
@@ -1127,10 +1336,8 @@ class DrawPage(
     private fun taggerReadyError(): String? {
         val model = taggerModelFile() ?: return c.getString(R.string.s_228)
         val csv = taggerCsvFile() ?: return c.getString(R.string.s_228)
-        if (!TaggerEngine.isLoaded()) return c.getString(R.string.s_259)
-        val (mName, cName) = TaggerEngine.fileNames()
-        if (mName != model.name || cName != csv.name || TaggerEngine.loadedWithGpu() != useGpu)
-            return c.getString(R.string.s_259)
+        val sel = TaggerSelection(model.name, csv.name, useGpu)
+        if (!sel.isReadyWith(currentTaggerSession())) return c.getString(R.string.s_259)
         return null
     }
 
@@ -1211,40 +1418,32 @@ class DrawPage(
     // ---- 打标模型文件（模型页导入，这里只读） ----
 
     /** 打标目录：filesDir/tagger */
-    private fun taggerDir(): File = File(c.filesDir, TAGGER_DIR).apply { mkdirs() }
+    private fun taggerDir(): File = taggerStore.dir()
 
     /** 已导入的打标模型（.onnx），按名字排序 */
-    fun listTaggerModels(): List<File> =
-        taggerDir().listFiles { f -> f.isFile && f.name.endsWith(".onnx", true) }?.sortedBy { it.name } ?: emptyList()
+    fun listTaggerModels(): List<File> = taggerStore.listModels()
 
     /** 已导入的标签表（.csv） */
-    fun listTaggerCsvs(): List<File> =
-        taggerDir().listFiles { f -> f.isFile && f.name.endsWith(".csv", true) }?.sortedBy { it.name } ?: emptyList()
+    fun listTaggerCsvs(): List<File> = taggerStore.listCsvs()
 
     /** 当前选中的打标模型（优先上次选择的，否则第一个） */
-    fun taggerModelFile(): File? = pickSelected(listTaggerModels(), "selTaggerModel")
+    fun taggerModelFile(): File? = taggerStore.modelFile()
 
     /** 当前选中的标签表 */
-    fun taggerCsvFile(): File? = pickSelected(listTaggerCsvs(), "selTaggerCsv")
+    fun taggerCsvFile(): File? = taggerStore.csvFile()
 
-    private fun pickSelected(all: List<File>, key: String): File? {
-        if (all.isEmpty()) return null
-        val saved = prefs().getString(key, null)
-        return all.firstOrNull { it.name == saved } ?: all.first()
-    }
-
-    fun currentTaggerModelName(): String? = taggerModelFile()?.name
-    fun currentTaggerCsvName(): String? = taggerCsvFile()?.name
+    fun currentTaggerModelName(): String? = taggerStore.currentModelName()
+    fun currentTaggerCsvName(): String? = taggerStore.currentCsvName()
 
     /** 选择打标模型（换模型就卸载旧的，下次打标时重新加载） */
     fun selectTaggerModel(f: File) {
-        prefs().edit().putString("selTaggerModel", f.name).apply()
+        taggerStore.selectModel(f)
         TaggerEngine.unload()
     }
 
     /** 选择标签表 */
     fun selectTaggerCsv(f: File) {
-        prefs().edit().putString("selTaggerCsv", f.name).apply()
+        taggerStore.selectCsv(f)
         TaggerEngine.unload()
     }
 
@@ -1360,8 +1559,8 @@ class DrawPage(
         i2iBitmap = bmp
         i2iPreview.setImageBitmap(bmp)
         i2iPreview.visibility = View.VISIBLE
-        val w = ((bmp.width / 64) * 64).coerceIn(64, 2048)
-        val h = ((bmp.height / 64) * 64).coerceIn(64, 2048)
+        val w = DrawParamsLogic.alignSize(bmp.width)
+        val h = DrawParamsLogic.alignSize(bmp.height)
         i2iWidthEdit.setText(w.toString())
         i2iHeightEdit.setText(h.toString())
         i2iImgHint.text = c.getString(R.string.v_061, bmp.width, bmp.height)
@@ -1382,25 +1581,15 @@ class DrawPage(
     // ================= LoRA =================
 
     /** LoRA 目录：filesDir/draw/lora */
-    private fun loraDir(): File = File(File(c.filesDir, DIR_NAME), "lora").apply { mkdirs() }
+    private fun loraDir(): File = loraStore.loraDir()
 
     /** 已下载的 LoRA 列表（.safetensors） */
-    fun listLoras(): List<File> =
-        loraDir().listFiles { f -> f.isFile && f.name.endsWith(".safetensors", ignoreCase = true) }
-            ?.sortedBy { it.name } ?: emptyList()
+    fun listLoras(): List<File> = loraStore.list()
 
-    fun hasLora(): Boolean = listLoras().isNotEmpty()
+    fun hasLora(): Boolean = loraStore.hasAny()
 
     /** 当前生效的 LoRA（优先用户选中的，其次上次选中的，最后取第一个） */
-    fun activeLora(): File? {
-        val all = listLoras()
-        if (all.isEmpty()) return null
-        val sel = loraFile
-        if (sel != null && sel.isFile && all.any { it.absolutePath == sel.absolutePath }) return sel
-        val saved = prefs().getString("selLora", null)
-        if (saved != null) all.firstOrNull { it.name == saved }?.let { loraFile = it; return it }
-        return all.first()
-    }
+    fun activeLora(): File? = loraStore.active(loraFile)
 
     /** UI 高亮用：当前生效的 LoRA 名 */
     fun currentLoraName(): String? = activeLora()?.name
@@ -1408,7 +1597,7 @@ class DrawPage(
     /** 选中某个 LoRA（持久化选择） */
     fun selectLora(f: File) {
         loraFile = f
-        prefs().edit().putString("selLora", f.name).apply()
+        loraStore.select(f)
         refreshLoraHint()
         // Una LoRA de aceleracion (Hyper-SD / LCM / Lightning) cambia los pasos utiles:
         // aplicamos el preset de su familia para no generar con 20 pasos.
@@ -1425,12 +1614,12 @@ class DrawPage(
         else c.getString(R.string.v_027, (a.nameWithoutExtension), (size))
     }
 
-    fun deleteLora(f: File): Boolean = runCatching {
+    fun deleteLora(f: File): Boolean {
         if (loraFile?.absolutePath == f.absolutePath) loraFile = null
-        val ok = f.delete()
+        val ok = loraStore.delete(f)
         refreshLoraHint()
-        ok
-    }.getOrDefault(false)
+        return ok
+    }
 
     private fun refreshLoraHint() {
         try {
@@ -1456,6 +1645,21 @@ class DrawPage(
             loraFile = dest
             refreshLoraHint()
         }
+        return err
+    }
+
+    /**
+     * Descargar TAESD (mini autoencoder). Devuelve null si OK, o el mensaje de error.
+     *
+     * El archivo va a files/draw/taesd/. El usuario tiene que asignarlo al slot
+     * "taesd" del juego de modelos (Modelos/API → Modelo de dibujo → Taesd).
+     */
+    suspend fun downloadTaesd(useMirror: Boolean, onProgress: (Long, Long) -> Unit): String? {
+        val host = if (useMirror) "https://hf-mirror.com" else "https://huggingface.co"
+        val dir = File(File(c.filesDir, DIR_NAME), "taesd").apply { mkdirs() }
+        val dest = File(dir, "taesd.safetensors")
+        if (dest.exists() && dest.length() > TAESD_MIN_BYTES) return null
+        val err = downloadToFile("$host/$TAESD_HF_PATH", dest, TAESD_MIN_BYTES, onProgress)
         return err
     }
 
@@ -1515,100 +1719,15 @@ class DrawPage(
 
     // ================= 模型集（单文件 / 多文件；由「模型」页驱动） =================
 
-    /** 一个模型集：单文件 = 只填 model 槽位；多文件 = 主模型 + 各槽位配套文件。 */
-    class ModelSet(
-        val id: String,
-        var name: String,
-        var kind: String,
-        var family: String,
-        val dir: File?,
-        val files: MutableMap<String, File> = LinkedHashMap(),
-    ) {
-        /** 主模型文件。末尾那个兜底要跳过 taesd —— 它是可选附件，
-         *  万一某个集只有 taesd，也不该把它当成主模型。 */
-        fun mainFile(): File? = files["model"] ?: files["diffusion"]
-            ?: files.entries.firstOrNull { it.key != "taesd" }?.value
-        fun sizeBytes(): Long = files.values.sumOf { it.length() }
-        fun slotCount(): Int = files.size
-    }
-
-    private fun setsDir(): File = File(File(c.filesDir, DIR_NAME), "sets").apply { mkdirs() }
-
-    private fun safeId(s: String): String {
-        val t = s.replace(Regex("[^A-Za-z0-9._-]"), "_").trim('_').take(48)
-        return t.ifEmpty { "set" }
-    }
-
-    private fun newSetId(base: String): String {
-        val b = safeId(base)
-        var id = b
-        var i = 2
-        while (File(setsDir(), id).exists()) { id = "$b-$i"; i++ }
-        return id
-    }
-
-    private fun writeSetJson(s: ModelSet) {
-        val d = s.dir ?: return
-        runCatching {
-            val o = org.json.JSONObject()
-            o.put("name", s.name)
-            o.put("kind", s.kind)
-            o.put("family", s.family)
-            val a = org.json.JSONObject()
-            // 集目录里的文件只存文件名；集外的文件（旧版散落模型提升成集时会引用到）存绝对路径，
-            // 否则读回来会按集目录去拼、拼不到。两种情况靠 File.isAbsolute 区分。
-            s.files.forEach { (k, f) ->
-                val inSet = f.parentFile?.absoluteFile == d.absoluteFile
-                a.put(k, if (inSet) f.name else f.absolutePath)
-            }
-            o.put("slots", a)
-            File(d, "ponko-set.json").writeText(o.toString())
-        }
-    }
-
-    private fun readSetJson(dir: File): ModelSet? {
-        val o = runCatching { org.json.JSONObject(File(dir, "ponko-set.json").readText()) }.getOrNull() ?: return null
-        val files = LinkedHashMap<String, File>()
-        o.optJSONObject("slots")?.let { a ->
-            val keys = a.keys()
-            while (keys.hasNext()) {
-                val k = keys.next()
-                val fn = a.optString(k, "")
-                val stored = File(fn)
-                val f = if (stored.isAbsolute) stored else File(dir, fn)
-                if (fn.isNotEmpty() && f.isFile) files[k] = f
-            }
-        }
-        return ModelSet(dir.name, o.optString("name", dir.name),
-            o.optString("kind", KIND_MULTI), o.optString("family", "custom"), dir, files)
-    }
-
     /** 私有目录里已有的绘图模型：新式模型集（draw/sets 下的子目录）+ 旧版散落的单文件 gguf */
-    fun listSets(): List<ModelSet> {
-        val out = ArrayList<ModelSet>()
-        setsDir().listFiles { f -> f.isDirectory }?.sortedByDescending { it.lastModified() }?.forEach { d ->
-            readSetJson(d)?.let { out.add(it) }
-        }
-        val loose = File(c.filesDir, DIR_NAME).listFiles { f ->
-            f.isFile && f.name.endsWith(".gguf", true) && !f.name.startsWith(".")
-        }?.sortedByDescending { it.lastModified() } ?: emptyList()
-        val looseVae = loose.firstOrNull { it.name.contains("vae", true) }
-        for (f in loose) {
-            if (f === looseVae) continue
-            val files = LinkedHashMap<String, File>()
-            files["model"] = f
-            if (looseVae != null) files["vae"] = looseVae
-            out.add(ModelSet("legacy:${f.name}", f.nameWithoutExtension, KIND_SINGLE, "other", null, files))
-        }
-        return out
-    }
+    fun listSets(): List<ModelSet> = setStore.listSets()
 
     /** 启动后兜底：把上次选中的模型集（或第一个）设为当前 */
     fun ensureActiveSet() {
         if (activeSet != null) return
         val all = listSets()
         if (all.isEmpty()) return
-        val saved = prefs().getString(KEY_SEL_SET, null)
+        val saved = setStore.selectedSetId()
         val pick = all.firstOrNull { it.id == saved } ?: all.first()
         selectSet(pick)
     }
@@ -1625,22 +1744,57 @@ class DrawPage(
         activeSet = s
         mainModel = s.mainFile()
         vaeModel = s.files["vae"]
-        prefs().edit().putString(KEY_SEL_SET, s.id).apply()
+        setStore.selectSet(s)
     }
 
     fun deleteSet(s: ModelSet): Boolean {
-        val ok = if (s.dir != null) runCatching { s.dir.deleteRecursively() }.getOrDefault(false)
-        else s.files.values.all { runCatching { it.delete() }.getOrDefault(false) }
+        val ok = setStore.deleteSet(s)
         if (activeSet?.id == s.id) activeSet = null
-        if (prefs().getString(KEY_SEL_SET, null) == s.id) prefs().edit().remove(KEY_SEL_SET).apply()
         return ok
     }
+
+    /**
+     * 把已下载的 TAESD 指到当前模型集的 "taesd" 槽位。
+     *
+     * El archivo vive en files/draw/taesd/ (fuera del set), asi que se guarda
+     * la ruta absoluta — el loader de sets ya distingue entre nombre y ruta
+     * absoluta (File.isAbsolute).
+     *
+     * Devuelve true si se pudo asignar.
+     */
+    fun assignTaesdToActiveSet(): Boolean {
+        val f = taesdFile() ?: return false
+        // La ruta se guarda como preferencia global (no en el set): los sets "legacy"
+        // (archivos sueltos) no tienen directorio donde escribir el JSON, y el
+        // TAESD sirve igual para cualquier modelo SD1.x/SD2.x.
+        setStore.setTaesdPath(f.absolutePath)
+        // Y ademas se apunta en el set activo, si es uno con directorio (multi-archivo).
+        val s = activeSetOrSelected()
+        if (s != null && s.dir != null) {
+            s.files["taesd"] = f
+            setStore.writeSetJson(s)
+        }
+        return true
+    }
+
+    /** Ruta del TAESD activa (preferencia global) o null. */
+    fun activeTaesdPath(): String? {
+        val pref = setStore.taesdPath()
+        if (!pref.isNullOrBlank() && File(pref).exists()) return pref
+        // El set activo puede tener su propio taesd (multi-archivo).
+        val s = activeSetOrSelected()
+        val inSet = s?.files?.get("taesd")
+        if (inSet != null && inSet.exists()) return inSet.absolutePath
+        return null
+    }
+
+    /** 路径 del TAESD descargado, o null si no está. */
+    fun taesdFile(): File? = setStore.taesdFile()
 
     /** 只把槽位从集里摘掉，不删文件（同一个文件可能被多个槽位共用） */
     fun clearSlot(key: String) {
         val s = activeSetOrSelected() ?: return
-        s.files.remove(key)
-        writeSetJson(s)
+        setStore.clearSlot(s, key)
     }
 
     /** 模型集摘要：名字 · 单/多文件 · 家族 · 文件数 · 体积 */
@@ -1680,8 +1834,8 @@ class DrawPage(
             val cur = activeSet
             val useSet: ModelSet = when {
                 pendingNewSet || cur == null -> {
-                    val id = newSetId(name.substringBeforeLast('.'))
-                    val dir = File(setsDir(), id).apply { mkdirs() }
+                    val dir = setStore.createSetDir(name.substringBeforeLast('.'))
+                    val id = dir.name
                     ModelSet(id, id, pendingKind, pendingFamily, dir).also {
                         activeSet = it
                         pendingNewSet = false
@@ -1690,7 +1844,7 @@ class DrawPage(
                 cur.dir == null -> {
                     // 旧版散落单文件（不是模型集）：要补配套文件就得先提升成模型集。
                     // 主模型动辄几 GB，**不复制、不搬动**——沿用原文件，写 json 时记绝对路径引用。
-                    val dir = File(setsDir(), newSetId(cur.name)).apply { mkdirs() }
+                    val dir = setStore.createSetDir(cur.name)
                     ModelSet(dir.name, cur.name, cur.kind, cur.family, dir, LinkedHashMap(cur.files)).also {
                         activeSet = it
                     }
@@ -1735,7 +1889,7 @@ class DrawPage(
                 }
             }
             useSet.files[key] = dest
-            writeSetJson(useSet)
+            setStore.writeSetJson(useSet)
             selectSet(useSet)
             withContext(Dispatchers.Main) {
                 statusText.text = c.getString(R.string.s_161)
@@ -1887,6 +2041,11 @@ class DrawPage(
         // 槽位表 → sd.cpp 的路径参数
         val slots = LinkedHashMap<String, String>()
         set.files.forEach { (k, f) -> slots[k] = f.absolutePath }
+        // TAESD global: si esta descargado y el set no trae el suyo, se anade aqui.
+        // Asi sirve para los modelos sueltos ("legacy"), que no tienen set donde guardar slots.
+        activeTaesdPath()?.let { p ->
+            if (!slots.containsKey("taesd")) slots["taesd"] = p
+        }
         val missing = slotMissingIds(set).map { c.getString(slotLabelRes(it)) }
         if (missing.isNotEmpty()) {
             val msg = c.getString(R.string.s_363, missing.joinToString("、"))
@@ -1937,6 +2096,8 @@ class DrawPage(
                 flashAttn = flashAttn,
                 backend = b,
                 slots = SdCppEngine.buildSlots(slots),
+                // 权重按阶段装载：每次只把当前阶段要的组件拉进 RAM
+                diskWeights = DrawMemoryMode.useDiskWeights(c),
             )
             var used = gpuDev ?: "CPU"
             var h = createWith(used)
@@ -2160,6 +2321,265 @@ class DrawPage(
     /** 用户是否已请求中断当前生成（用于把“取消”与“真失败”区分开）。 */
     @Volatile private var cancelRequested = false
 
+    /**
+     * 放大强度：0.05（几乎原图，只补细节）→ 0.99（几乎重画）。
+     * SeekBar progress 0..94 mapea a 0.05..0.99。
+     */
+    private fun currentUpscaleStrength(): Float =
+        DrawParamsLogic.upscaleStrength(upscaleStrengthBar.progress)
+
+    /** VAE tiling 相关的行只在开关打开时显示 */
+    private fun refreshVaeTilingRows() {
+        if (!::vaeTileSizeEdit.isInitialized) return
+        val on = vaeTilingCheck.isChecked
+        vaeTileSizeEdit.parent?.let { (it as? View)?.visibility = if (on) View.VISIBLE else View.GONE }
+        vaeTileOverlapEdit.parent?.let { (it as? View)?.visibility = if (on) View.VISIBLE else View.GONE }
+    }
+
+    /** 读 VAE tiling 的配置（关掉时返回 null，让引擎走整帧解码） */
+    private fun vaeTilingParams(): Triple<Boolean, Int, Float>? {
+        if (!::vaeTilingCheck.isInitialized || !vaeTilingCheck.isChecked) return null
+        val size = DrawParamsLogic.vaeTileSize(vaeTileSizeEdit.text.toString())
+        val overlap = DrawParamsLogic.vaeTileOverlap(vaeTileOverlapEdit.text.toString())
+        return Triple(true, size, overlap)
+    }
+
+    /** 刷新「放大强度」旁边的实时数值 */
+    private fun updateUpscaleStrengthLabel() {
+        if (!::upscaleStrengthText.isInitialized || !::upscaleStrengthBar.isInitialized) return
+        val v = currentUpscaleStrength()
+        // Locale.US: que el separador decimal sea siempre punto, no coma (evita "0,35")
+        upscaleStrengthText.text = c.getString(R.string.s_530, String.format(java.util.Locale.US, "%.2f", v))
+    }
+
+    /**
+     * 放大最后一张图（2×）。
+     *
+     * 走「图生图」通道：把当前结果当参考图（initImage）以 2× 尺寸重绘，
+     * strength（可调，默认 0.35）决定重绘幅度 —— 越小越贴原图、只补细节。
+     * 这比「同种子重新抽卡」稳得多：同种子换分辨率并不保证同一张脸。
+     */
+    private fun upscaleLast() {
+        val src = lastImage
+        if (src == null) {
+            c.toast(c.getString(R.string.s_183), short = true)
+            return
+        }
+        if (DrawCore.busy) {
+            Toast.makeText(c, c.getString(R.string.s_428), Toast.LENGTH_LONG).show()
+            return
+        }
+        val prompt = promptEdit.text.toString().trim()
+        if (prompt.isEmpty()) {
+            Toast.makeText(c, c.getString(R.string.s_047), Toast.LENGTH_SHORT).show()
+            return
+        }
+        persistAll()
+
+        val startedAt = System.currentTimeMillis()
+        setGenerating(true)
+        progressText.visibility = View.VISIBLE
+        progressText.text = c.getString(R.string.s_525)
+        curStep = 0
+        totalStep = 0
+        progressBar.progress = 0
+        progressBar.visibility = View.VISIBLE
+        // 放大专用进度条（结果页那条），跟进度文字一起显示
+        if (::upscaleProgressBar.isInitialized) {
+            upscaleProgressBar.progress = 0
+            upscaleProgressBar.visibility = View.VISIBLE
+        }
+        if (::upscaleProgressText.isInitialized) {
+            upscaleProgressText.visibility = View.VISIBLE
+            upscaleProgressText.text = c.getString(R.string.s_525)
+        }
+        onStatus?.invoke(c.getString(R.string.s_525), false)
+
+        // 2× 尺寸，夹到 2048（sd.cpp 上限）；步数用当前值，img2img 步数少但要够
+        val (w, hgt) = DrawParamsLogic.upscaleTargetSize(src.width, src.height)
+        val steps = DrawParamsLogic.steps(stepsEdit.text.toString())
+        val cfg = DrawParamsLogic.cfg(cfgEdit.text.toString())
+        val seed = seedEdit.text.toString().toLongOrNull()?.takeIf { it >= 0 } ?: System.currentTimeMillis()
+        val strength = currentUpscaleStrength()   // 用户可调：0.05 = 几乎原图, 0.99 = 几乎重画
+
+        // 放大方式：0 = 图生图重绘（原图当参考图重画），1 = sd.cpp 原生 hires fix
+        // 原生 hires fix 是另一条路：第一轮照常按原尺寸出图，再由 sd.cpp 内部把 latent
+        // 放大并做第二轮降噪 —— 构图不重随、prompt token 不额外消耗。
+        val mode = if (::upscaleModeSpinner.isInitialized) upscaleModeSpinner.selectedItemPosition else 1
+        val useNativeHires = mode == 1
+        val upscaler = if (::upscaleUpscalerSpinner.isInitialized) {
+            SdCppEngine.HiresUpscaler.entries.getOrElse(
+                upscaleUpscalerSpinner.selectedItemPosition) { SdCppEngine.HiresUpscaler.LATENT }
+        } else {
+            SdCppEngine.HiresUpscaler.LATENT
+        }
+        // 原生 hires：第一轮尺寸 = 原图尺寸，目标 = 2×
+        val firstPass = if (useNativeHires) DrawParamsLogic.hiresFirstPassSize(src.width, src.height) else null
+        val firstW = firstPass?.first ?: w
+        val firstH = firstPass?.second ?: hgt
+        // 原生 hires 的第二轮降噪强度直接用同一个 slider（0.05–0.99）
+        // hires 原生用的是 denoising_strength：0 = 完全保留放大后的 latent（只放大不加细节），
+        // 1 = 全部重新采样（构图会丢）。slider 的 0.05–0.99 直接传过去太极端，
+        // 所以映射到 hires 真正好用的区间 0.15–0.55：
+        //   0.15 = 几乎原图 + 轻微锐化（保守）
+        //   0.35 = 平衡（默认）
+        //   0.55 = 明显加细节（可能动构图）
+        val hiresDenoise = if (useNativeHires) {
+            DrawParamsLogic.hiresDenoise(strength)
+        } else 0.7f
+        val vaeTiling = vaeTilingParams()
+
+        scope.launch {
+            val ticker = launch {
+                while (true) {
+                    delay(1000)
+                    val sec = (System.currentTimeMillis() - startedAt) / 1000
+                    progressText.post {
+                        // 放大用自己的阶段词（"Ampliando…"），别用普通生成的"Cargando modelo…"
+                        val phase = if (sec < 8) c.getString(R.string.s_525) else c.getString(R.string.s_129)
+                        val stepInfo = if (totalStep > 0) c.getString(R.string.v_049, curStep, totalStep) else ""
+                        progressText.text = c.getString(R.string.v_050, phase, stepInfo, sec)
+                        if (::procStepText.isInitialized) {
+                            procStepText.text = c.getString(R.string.v_050, phase, stepInfo, sec)
+                        }
+                        if (totalStep > 0) {
+                            progressBar.progress = (curStep * 100 / totalStep).coerceIn(0, 100)
+                            if (::procProgressBar.isInitialized) {
+                                procProgressBar.progress = (curStep * 100 / totalStep).coerceIn(0, 100)
+                            }
+                        }
+                        // 放大进度条（结果页）：同源数据
+                        if (::upscaleProgressBar.isInitialized) {
+                            if (totalStep > 0) {
+                                upscaleProgressBar.progress = (curStep * 100 / totalStep).coerceIn(0, 100)
+                            }
+                            if (::upscaleProgressText.isInitialized) {
+                                upscaleProgressText.text = c.getString(R.string.v_050, phase, stepInfo, sec)
+                            }
+                        }
+                    }
+                }
+            }
+            try {
+                val h = sdHandle
+                if (h == 0L) throw IllegalStateException(c.getString(R.string.s_163))
+                if (mainModel == null) throw IllegalStateException(c.getString(R.string.s_121))
+                val lora = if (useLora) activeLora() else null
+                val negative = negEdit.text.toString()
+                val sampler = pickSampler(lora != null)
+                val scheduler = pickScheduler(lora != null)
+                val loraScale = DrawParamsLogic.loraScale(loraScaleEdit.text.toString())
+
+                val bmp = withContext(Dispatchers.IO) {
+                    if (useNativeHires) {
+                        // 原生 hires fix：不用 init_image，让 sd.cpp 自己放大 latent + 二次降噪。
+                        // 第一轮尺寸 = 原图尺寸（保持构图），目标尺寸 = 2×。
+                        SdCppEngine.render(
+                            handle = h,
+                            prompt = prompt,
+                            negative = negative,
+                            loraPath = lora?.absolutePath,
+                            loraScale = loraScale,
+                            width = firstW,
+                            height = firstH,
+                            steps = steps,
+                            cfg = cfg,
+                            seed = seed,
+                            sampler = sampler,
+                            scheduler = scheduler,
+                            cb = { cur, total -> curStep = cur; totalStep = total },
+                            hiresEnabled = true,
+                            hiresTargetWidth = w,
+                            hiresTargetHeight = hgt,
+                            hiresSteps = steps,
+                            hiresDenoiseStrength = hiresDenoise,
+                            hiresUpscaler = upscaler,
+                            vaeTilingEnabled = vaeTiling?.first ?: false,
+                            vaeTileSize = vaeTiling?.second ?: 512,
+                            vaeTileOverlap = vaeTiling?.third ?: 0.25f,
+                        )
+                    } else {
+                        // 图生图重绘：原图当参考图，按 2× 尺寸重画
+                        val rgb = SdCppEngine.bitmapToRgb888(src)
+                        SdCppEngine.render(
+                            handle = h,
+                            prompt = prompt,
+                            negative = negative,
+                            loraPath = lora?.absolutePath,
+                            loraScale = loraScale,
+                            width = w,
+                            height = hgt,
+                            steps = steps,
+                            cfg = cfg,
+                            seed = seed,
+                            sampler = sampler,
+                            scheduler = scheduler,
+                            cb = { cur, total -> curStep = cur; totalStep = total },
+                            initImage = rgb,
+                            initWidth = src.width,
+                            initHeight = src.height,
+                            strength = strength,
+                            vaeTilingEnabled = vaeTiling?.first ?: false,
+                            vaeTileSize = vaeTiling?.second ?: 512,
+                            vaeTileOverlap = vaeTiling?.third ?: 0.25f,
+                        )
+                    }
+                } ?: throw IllegalStateException(c.getString(R.string.s_147))
+
+                ticker.cancel()
+                val sec = (System.currentTimeMillis() - startedAt) / 1000
+                val img = ImageData(bmp, seed)
+                resultImg.post {
+                    DrawHistory.add(img)
+                    lastImage = bmp
+                    resultImg.setImageBitmap(bmp)
+                    resultInfo.text = c.getString(R.string.v_051, bmp.width, bmp.height, seed, sec)
+                    refreshHistory()
+                    switchPane(toResult = true)
+                }
+                val doneTxt = c.getString(R.string.v_052, bmp.width, bmp.height, seed, sec)
+                progressText.post { progressText.text = doneTxt }
+                if (::procStepText.isInitialized) procStepText.post { procStepText.text = doneTxt }
+                // 放大完成：进度条填满再藏起来
+                if (::upscaleProgressBar.isInitialized) {
+                    upscaleProgressBar.post {
+                        upscaleProgressBar.progress = 100
+                        upscaleProgressBar.visibility = View.GONE
+                    }
+                }
+                if (::upscaleProgressText.isInitialized) {
+                    upscaleProgressText.post { upscaleProgressText.visibility = View.GONE }
+                }
+                onStatus?.invoke(c.getString(R.string.v_053, sec), false)
+            } catch (e: Throwable) {
+                ticker.cancel()
+                val sec = (System.currentTimeMillis() - startedAt) / 1000
+                if (cancelRequested) {
+                    val stopTxt = c.getString(R.string.v_054, sec)
+                    progressText.post { progressText.text = stopTxt }
+                    if (::procStepText.isInitialized) procStepText.post { procStepText.text = stopTxt }
+                    onStatus?.invoke(c.getString(R.string.s_154), false)
+                } else {
+                    val errTxt = c.getString(R.string.v_059, sec, e.message ?: e.javaClass.simpleName) + "\n" + c.getString(R.string.v_060)
+                    progressText.post { progressText.text = errTxt }
+                    if (::procStepText.isInitialized) procStepText.post { procStepText.text = errTxt }
+                    onStatus?.invoke(c.getString(R.string.v_055, e.message ?: e.javaClass.simpleName), true)
+                }
+            } finally {
+                setGenerating(false)
+                progressBar.post { progressBar.visibility = View.GONE }
+                // 放大出错/取消：进度条也收起来
+                if (::upscaleProgressBar.isInitialized) {
+                    upscaleProgressBar.post { upscaleProgressBar.visibility = View.GONE }
+                }
+                if (::upscaleProgressText.isInitialized) {
+                    upscaleProgressText.post { upscaleProgressText.visibility = View.GONE }
+                }
+                switchResultPage(0)
+            }
+        }
+    }
+
     /** 供对话页复用的生成入口：把输入当正面提示词，其余参数取绘图页当前设置。 */
     suspend fun generateImage(
         prompt: String,
@@ -2168,13 +2588,14 @@ class DrawPage(
     ): ImageData {
         // 绘图接口正在出图时别插队：同一个 native 句柄同时跑两个任务会错乱
         if (DrawCore.busy) throw IllegalStateException(c.getString(R.string.s_428))
-        val steps = stepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20
-        val cfg = cfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f
+        val vaeTiling = vaeTilingParams()
+        val steps = DrawParamsLogic.steps(stepsEdit.text.toString())
+        val cfg = DrawParamsLogic.cfg(cfgEdit.text.toString())
         val seed = seedEdit.text.toString().toLongOrNull() ?: -1L
         val useSeed = if (seed < 0) System.currentTimeMillis() else seed
         // 宽高：sd.cpp 要求 64 的倍数，向下取整；夹到 64~2048 防止手滑
-        val w = (widthEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val hgt = (heightEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
+        val w = DrawParamsLogic.size(widthEdit.text.toString())
+        val hgt = DrawParamsLogic.size(heightEdit.text.toString())
         onProgress(0, steps)
         cancelRequested = false
 
@@ -2191,7 +2612,7 @@ class DrawPage(
         val sampler = pickSampler(lora != null)
         val scheduler = pickScheduler(lora != null)
         // LoRA 权重：0 = 不挂，1.0 是标准
-        val loraScale = loraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f
+        val loraScale = DrawParamsLogic.loraScale(loraScaleEdit.text.toString())
 
         // 对话页出图不走界面的 setGenerating，这里手动上报一句：
         // 否则 API 侧不知道界面在出图，会插进来抢同一个 native 句柄
@@ -2217,6 +2638,9 @@ class DrawPage(
                     onPreview = onPreview?.let { f ->
                         SdCppEngine.PreviewCallback { st, w, h, rgb -> f(st, w, h, rgb) }
                     },
+                    vaeTilingEnabled = vaeTiling?.first ?: false,
+                    vaeTileSize = vaeTiling?.second ?: 512,
+                    vaeTileOverlap = vaeTiling?.third ?: 0.25f,
                 )
             } ?: throw IllegalStateException(c.getString(R.string.s_147))
             onProgress(steps, steps)
@@ -2361,13 +2785,14 @@ class DrawPage(
         onProgress: (Int, Int) -> Unit = { _, _ -> },
         onPreview: ((Int, Int, Int, ByteArray) -> Unit)? = null,
     ): ImageData {
-        val steps = i2iStepsEdit.text.toString().toIntOrNull()?.coerceIn(1, 150) ?: 20
-        val cfg = i2iCfgEdit.text.toString().toFloatOrNull()?.coerceIn(1f, 30f) ?: 7.0f
+        val steps = DrawParamsLogic.steps(i2iStepsEdit.text.toString())
+        val cfg = DrawParamsLogic.cfg(i2iCfgEdit.text.toString())
         val seed = i2iSeedEdit.text.toString().toLongOrNull() ?: -1L
         val useSeed = if (seed < 0) System.currentTimeMillis() else seed
-        val w = (i2iWidthEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val hgt = (i2iHeightEdit.text.toString().toIntOrNull() ?: 512).let { (it / 64) * 64 }.coerceIn(64, 2048)
-        val strength = i2iStrengthEdit.text.toString().toFloatOrNull()?.coerceIn(0.05f, 0.99f) ?: 0.75f
+        val w = DrawParamsLogic.size(i2iWidthEdit.text.toString())
+        val hgt = DrawParamsLogic.size(i2iHeightEdit.text.toString())
+        val strength = DrawParamsLogic.i2iStrength(i2iStrengthEdit.text.toString())
+        val vaeTiling = vaeTilingParams()
         onProgress(0, steps)
         cancelRequested = false
 
@@ -2380,7 +2805,7 @@ class DrawPage(
         val negative = i2iNegEdit.text.toString()
         val sampler = pickI2iSampler(lora != null)
         val scheduler = pickI2iScheduler(lora != null)
-        val loraScale = i2iLoraScaleEdit.text.toString().toFloatOrNull()?.coerceIn(0f, 2f) ?: 1.0f
+        val loraScale = DrawParamsLogic.loraScale(i2iLoraScaleEdit.text.toString())
 
         val bmp = withContext(Dispatchers.IO) {
             val rgb = SdCppEngine.bitmapToRgb888(src)
@@ -2405,6 +2830,9 @@ class DrawPage(
                 initWidth = src.width,
                 initHeight = src.height,
                 strength = strength,
+                vaeTilingEnabled = vaeTiling?.first ?: false,
+                vaeTileSize = vaeTiling?.second ?: 512,
+                vaeTileOverlap = vaeTiling?.third ?: 0.25f,
             )
         } ?: throw IllegalStateException(c.getString(R.string.s_147))
         onProgress(steps, steps)
@@ -2436,6 +2864,10 @@ class DrawPage(
             i2iGenBtn.text = if (g) c.getString(R.string.s_040) else c.getString(R.string.s_098)
             i2iGenBtn.setBackgroundColor(if (g) pal.stop else primary)
         }
+        // 结果页的「取消生成」按钮：只在出图中显示
+        if (::resultCancelBtn.isInitialized) resultCancelBtn.post {
+            resultCancelBtn.visibility = if (g) View.VISIBLE else View.GONE
+        }
     }
 
     fun cancel() {
@@ -2461,6 +2893,16 @@ class DrawPage(
     }
 
     fun release() {
+        // 出图还在跑时不能 free native 句柄：sd.cpp 的 free_sd_ctx 会销毁正在使用的
+        // VAE/UNet，ggml_runner 撞上 GGML_ASSERT(!graph_active_) 直接 abort，
+        // 整个进程 native crash（SIGABRT）。交给 native 侧的延迟释放处理。
+        if (DrawCore.uiBusy) {
+            // 让引擎自己收尾：nativeFree 会登记成 pending，推理线程退出时再真正释放。
+            DrawCore.release()
+            if (sdHandle != 0L) runCatching { SdCppEngine.nativeFree(sdHandle) }
+            sdHandle = 0L
+            return
+        }
         DrawCore.release()   // 顺序不能反：先断开 API 侧的引用，再真正释放 native 句柄
         if (sdHandle != 0L) runCatching { SdCppEngine.nativeFree(sdHandle) }
         sdHandle = 0L
@@ -2630,6 +3072,124 @@ class DrawPage(
     }
 
     /** 宽 × 高 输入行 */
+    /**
+     * 尺寸预设按钮组：64/128/256/384/512 + 「Personalizado」。
+     *
+     * 选预设 → 直接把 width/height 填好；选 Personalizado → 显示自定义输入行。
+     * 用户手改宽高后自动切回「Personalizado」（避免按钮状态和实际值对不上）。
+     */
+    private fun sizePresetRow(): View {
+        val wrap = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        wrap.addView(smallLabel(c.getString(R.string.s_532)))
+
+        val presets = SIZE_PRESETS
+        val row = LinearLayout(c).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        sizePresetButtons.clear()
+        presets.forEachIndexed { idx, px ->
+            val b = android.widget.Button(c).apply {
+                text = "$px"
+                textSize = 12f
+                setTextColor(textColor)
+                isAllCaps = false
+                setPadding(c.dp(4), c.dp(2), c.dp(4), c.dp(2))
+                setOnClickListener {
+                    applySizePreset(idx)
+                }
+            }
+            sizePresetButtons.add(b)
+            row.addView(b, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = c.dp(2)
+                marginEnd = c.dp(2)
+            })
+        }
+        // 「Personalizado」按钮：放进同一行，权重稍大（文字更长）
+        val customBtn = android.widget.Button(c).apply {
+            text = c.getString(R.string.s_533)
+            textSize = 11f
+            setTextColor(textColor)
+            isAllCaps = false
+            setPadding(c.dp(4), c.dp(2), c.dp(4), c.dp(2))
+            setOnClickListener { applySizePreset(-1) }
+        }
+        // 放最后，方便 applySizePreset 用 index == -1 表示「自定义」并统一高亮
+        sizePresetButtons.add(customBtn)
+        row.addView(customBtn, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.4f).apply {
+            marginStart = c.dp(4)
+        })
+        wrap.addView(row, c.matchWrap(top = 4))
+
+        // 自定义宽高输入行（默认隐藏，选「Personalizado」才出现）
+        val customRow = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        customRow.addView(smallLabel(c.getString(R.string.s_534)))
+        val fields = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+        fields.addView(widthEdit, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        fields.addView(TextView(c).apply {
+            text = " × "
+            textSize = 14f
+            setTextColor(textColor)
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        fields.addView(heightEdit, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        customRow.addView(fields, c.matchWrap(top = 4))
+        customRow.addView(TextView(c).apply {
+            text = c.getString(R.string.s_535)
+            textSize = 10.5f
+            setTextColor(subText)
+            setPadding(0, c.dp(3), 0, 0)
+        })
+        customRow.visibility = View.GONE
+        customSizeRow = customRow
+        wrap.addView(customRow, c.matchWrap(top = 6))
+
+        // 初始状态：按当前宽高判断落在哪个预设上
+        val cur = widthEdit.text.toString().toIntOrNull()
+        val idx = presets.indexOf(cur).takeIf { it >= 0 && heightEdit.text.toString().toIntOrNull() == cur }
+        applySizePreset(idx ?: -1, updateFields = false)
+
+        // 用户手改宽高 → 自动切到「Personalizado」，并显示输入行
+        // （否则按钮高亮和实际值会对不上，误导用户）
+        val watcher = object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (suppressPresetSync) return
+                val w = widthEdit.text.toString().toIntOrNull()
+                val h = heightEdit.text.toString().toIntOrNull()
+                val match = presets.indexOf(w).takeIf { it >= 0 && h == w }
+                if (match == null && selectedSizePreset != null) {
+                    applySizePreset(-1, updateFields = false)
+                }
+            }
+        }
+        widthEdit.addTextChangedListener(watcher)
+        heightEdit.addTextChangedListener(watcher)
+
+        return wrap
+    }
+
+    /** 高亮选中的预设按钮，并显示/隐藏自定义输入行 */
+    private fun applySizePreset(index: Int, updateFields: Boolean = true) {
+        if (updateFields && index >= 0) {
+            val px = SIZE_PRESETS.getOrNull(index) ?: return
+            suppressPresetSync = true
+            widthEdit.setText(px.toString())
+            heightEdit.setText(px.toString())
+            suppressPresetSync = false
+        }
+        selectedSizePreset = if (index >= 0) index else null
+        sizePresetButtons.forEachIndexed { i, b ->
+            // 最后一个是「Personalizado」：index == -1 时高亮它
+            val isCustom = i == sizePresetButtons.size - 1
+            val on = if (isCustom) index == -1 else i == index
+            b.setBackgroundColor(if (on) pal.primary else pal.fieldBg)
+            b.setTextColor(if (on) pal.bg else textColor)
+        }
+        customSizeRow?.visibility = if (index == -1) View.VISIBLE else View.GONE
+    }
+
     private fun whRow(label: String, hint: String, wEdit: EditText, hEdit: EditText): View {
         val wrap = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         wrap.addView(smallLabel(label))
@@ -2696,6 +3256,9 @@ class DrawPage(
         put(KEY_CFG, cfgEdit)
         put(KEY_SEED, seedEdit)
         put(KEY_LORA_SCALE, loraScaleEdit)
+        if (::upscaleStrengthBar.isInitialized) {
+            e.putString(KEY_UPSCALE_STRENGTH, currentUpscaleStrength().toString())
+        }
         e.putInt(KEY_SAMPLER, samplerSpinner.selectedItemPosition)
         e.putInt(KEY_SCHEDULER, schedulerSpinner.selectedItemPosition)
         if (::i2iStepsEdit.isInitialized) {
