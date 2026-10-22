@@ -9,7 +9,9 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.AdapterView
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
@@ -205,6 +207,55 @@ class SettingsPage(private val host: SettingsHost) : ThemeAliases {
 
         settingsBody.addView(
             host.ui.hintText(getString(R.string.s_519, InferConfig.recommendedThreads(ctx))),
+            matchWrap().apply { topMargin = dp(4) }
+        )
+
+        // ---- Cuantización del cache KV (solo GGUF / llama.cpp) ----
+        // El cache K/V guarda el contexto. En F16 ocupa el doble de RAM que
+        // en Q8_0; con contextos largos la diferencia son gigas. Q8_0 es la
+        // recomendación de llama.cpp y no se nota en la calidad.
+        settingsBody.addView(host.ui.subTitle(getString(R.string.s_553)), matchWrap().apply { topMargin = dp(14) })
+        val kvOptions = KvCacheConfig.OPTIONS
+        val kvSpinner = Spinner(ctx).apply {
+            adapter = android.widget.ArrayAdapter(
+                ctx,
+                android.R.layout.simple_spinner_dropdown_item,
+                kvOptions.map { KvCacheConfig.label(it) }
+            )
+            val current = KvCacheConfig.type(ctx)
+            setSelection(kvOptions.indexOf(current).coerceAtLeast(0))
+        }
+        kvSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                KvCacheConfig.setType(ctx, kvOptions[position])
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        settingsBody.addView(kvSpinner, wrapWrap().apply { topMargin = dp(8) })
+        settingsBody.addView(
+            host.ui.hintText(getString(R.string.s_554, KvCacheConfig.hint(KvCacheConfig.type(ctx)))),
+            matchWrap().apply { topMargin = dp(4) }
+        )
+
+        // ---- Memoria del motor de dibujo: pesos por etapas (residencia en disco) ----
+        // Con el modo "bajo consumo", sd.cpp no mantiene en RAM a la vez el
+        // codificador de texto, el UNet y el VAE: va trayendo el que hace
+        // falta en cada fase. El pico de memoria pasa de "la suma" a "el
+        // mayor", que es lo que permite que un modelo grande quepa en un
+        // movil. Se aplica en la siguiente carga del modelo.
+        settingsBody.addView(host.ui.subTitle(getString(R.string.s_555)), matchWrap().apply { topMargin = dp(14) })
+        val memSwitch = SegmentedSwitch(
+            ctx,
+            arrayOf(getString(R.string.s_556), getString(R.string.s_557)),
+            host.palette,
+        )
+        memSwitch.setIndexSilently(if (DrawMemoryMode.useDiskWeights(ctx)) 1 else 0)
+        memSwitch.onChanged = { i ->
+            DrawMemoryMode.setUseDiskWeights(ctx, i == 1)
+        }
+        settingsBody.addView(memSwitch, matchWrap().apply { topMargin = dp(8) })
+        settingsBody.addView(
+            host.ui.hintText(getString(R.string.s_558)),
             matchWrap().apply { topMargin = dp(4) }
         )
 

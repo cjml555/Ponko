@@ -16,7 +16,7 @@
 <string name="s_013">CFG scale</string>
 <string name="s_014">Discrete is the standard choice; Karras pairs with the DPM++ family; LCM goes with the LCM sampler</string>
 <string name="s_015">Euler a is the safest all-rounder; LCM / TCD are the few-step acceleration samplers for LoRA; DPM++ 2M / 2M SDE give more detail but are slower (DPM++ 2M SDE pairs well with the Karras scheduler)</string>
-<string name="s_016">GGUF runs on CPU for now (this runtime has no GPU backend)</string>
+<string name="s_016">This runtime has no Vulkan backend: the model stays on CPU</string>
 <string name="s_017">LCM-LoRA is a tens-of-MB \"distillation patch\". Attached to the main model it cuts 20 steps down to 4-8 (~5x faster) without touching the model file.</string>
 <string name="s_018">Downloading LoRA…</string>
 <string name="s_019">LoRA download failed</string>
@@ -76,6 +76,7 @@
 <string name="s_076">Chat model</string>
 <string name="s_077">Chat model loaded. If a draw model is loaded too, just say \"draw a ...\" and it will be used; otherwise use the Draw page.</string>
 <string name="s_078">Chat model loaded (llama.cpp · CPU · KV reuse)</string>
+<string name="s_078_gpu">Chat model loaded (llama.cpp · Vulkan GPU · KV reuse)</string>
 <string name="s_079">Chat model unloaded</string>
 <string name="s_080">Chat model unloaded.</string>
 <string name="s_081">Ready</string>
@@ -553,7 +554,14 @@
     <string name="s_511">Images</string>
     <string name="s_513">No models in this category yet</string>
 
-    <string name="s_514">Device</string>
+    <string name="s_560">GPU acceleration for GGUF is still experimental and is off for now: the driver can crash the app. The model runs on CPU.</string>
+    <string name="s_555">Drawing memory mode</string>
+    <string name="s_556">High speed</string>
+    <string name="s_557">Low memory</string>
+    <string name="s_558">Low memory loads the text encoder, the UNet and the VAE one at a time, so only one of them is in RAM. A big model fits on a phone; it can be slower if the system has to reload pages from storage. Applies the next time the model is loaded.</string>
+    <string name="s_553">KV cache quantization (GGUF)</string>
+    <string name="s_554">%1$s · applies the next time the model is loaded</string>
+<string name="s_514">Device</string>
     <string name="s_515">SoC</string>
     <string name="s_516">Cores</string>
     <string name="s_518">Vulkan</string>

@@ -370,13 +370,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   classpath de test**: `debugRuntimeClasspath` no lo incluye y el APK no lo
   lleva.
 
+### Added
+
+- **Carga secuencial de los pesos del motor de dibujo** (`params_backend =
+  "disk"`). sd.cpp ya separa los componentes del modelo (Conditioner /
+  Diffusion / VAE) y el `ModelManager` los libera al terminar cada etapa
+  (`ResidencyMode::Disk`): el pico de RAM pasa de "todos los componentes a
+  la vez" a "solo el que toca".
+  - SD 1.5: 2,11 GB -> 1,70 GB. SDXL: 3,46 -> 2,60 GB. FLUX: 21,4 -> 11,2 GB.
+  - Los pesos se mmapean una vez; volver a una etapa no relee el flash
+    (el kernel conserva las paginas en el page cache).
+  - Conmutable en Ajustes -> "Drawing memory mode" (Alta velocidad / Baja
+    memoria). Por defecto "Baja memoria".
+- **Cuantizacion del cache KV de llama.cpp** (Q8_0 por defecto, antes F16).
+  El cache K/V ocupaba el doble de RAM: con contextos de 32k son varios
+  GB. Q8_0 es la recomendacion de llama.cpp y no se nota en la calidad.
+  Selector en Ajustes (Q8_0 / Q4_0 / F16).
+- **AAR de llama.cpp con el backend Vulkan compilado dentro**
+  (`local-maven/net/ladenthin/llama-android-vulkan/5.1.0`). El AAR oficial
+  de Maven Central solo trae CPU, asi que la opcion "GPU" del chat no
+  podia hacer nada. El script reproducible esta en
+  `tools/build-llama-vulkan.sh` (compila llama.cpp b10682 para arm64 con
+  GGML_VULKAN=ON, usando el glslc y las cabeceras SPIRV del NDK).
+
+### Fixed
+
+### Known issues
+
+- **La aceleracion GPU de GGUF en Android sigue sin estar lista.** Con el
+  AAR de Vulkan, cargar un modelo con capas en la GPU todavia puede matar
+  el proceso: el driver de Adreno 710 de este movil no resuelve bien las
+  funciones de dispositivo de Vulkan. Un SIGSEGV no se puede catchar, asi
+  que la opcion "GPU" del chat **pide** GPU pero **no activa** las capas
+  (`GpuSupport.GGUF_GPU_EXPERIMENTAL = false`) y avisa al usuario. Con
+  CPU el modelo carga y responde bien.
+- El AAR oficial de upstream con OpenCL (`llama-android-opencl`) tampoco
+  sirve aqui: el compilador de shaders del driver de Qualcomm peta
+  (`libllvm-qcom.so` -> `QGPUI64EmulatePass::emulateModule`) al traducir el
+  kernel de ggml. Es un fallo del driver, no del codigo.
+
+### Fixed
+
+- **Dos parches en ggml-vulkan que lo hacian petar en Android**:
+  1. El dispatcher de Vulkan-Hpp se inicializaba solo con la instancia, asi
+     que las funciones de DISPOSITIVO (vkCreateBuffer, vkWaitSemaphores…)
+     quedaban a NULL y llamarlas moria con SIGSEGV en la direccion 0x0 al
+     cargar el modelo. Se re-inicializa con el device.
+  2. Algunos drivers anuncian la feature `bufferDeviceAddress` pero no
+     exportan `vkGetBufferDeviceAddress`; ahora se comprueba antes de
+     fiarse de la feature.
+- El manifiesto declara `android.hardware.vulkan` y `android.hardware.opencl`
+  (`required="false"`): desde Android 12 el sistema no expone los
+  dispositivos Vulkan a una app que no declare la feature.
+
 ### Verified
 
 - `./gradlew :app:compileDebugKotlin` → BUILD SUCCESSFUL
-- `./gradlew :app:testDebugUnitTest` → **244/244** tests pasan
+- `./gradlew :app:testDebugUnitTest` → **273/273** tests pasan
   (`ChatSendLogicTest` 15, `ContextBudgetTest` 12, `DownloadIntegrityTest` 19,
-  `DownloadProgressTest` 18, `DrawFileImporterTest` 5, `OpenAiApiTest` 28,
-  `RangePlanTest` 23, `RangedDownloaderTest` 10, `ReasoningSplitterTest` 18,
+  `DownloadProgressTest` 18, `DrawFileImporterTest` 5, `KvCacheConfigTest` 7,
+  `ModelLoadDecisionTest` 22, `OpenAiApiTest` 28, `RangePlanTest` 23,
+  `RangedDownloaderTest` 10, `ReasoningSplitterTest` 18,
   `ThreadRecommendationTest` 3, `UiScaleTest` 12, `draw.DistilledPresetsTest` 6,
   `draw.DrawParamsLogicTest` 21, `draw.LoraStoreTest` 13,
   `draw.ModelSetStoreTest` 21, `draw.TaggerReadyEquivalenceTest` 2,

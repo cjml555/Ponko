@@ -25,25 +25,39 @@ internal object ModelLoadDecision {
     /**
      * Capas a enviarle a llama.cpp.
      * -1 (GpuSupport.GPU_LAYERS_ALL) = todas las capas; 0 = solo CPU.
+     *
+     * Pedir GPU solo cuenta si la via experimental esta habilitada: un
+     * SIGSEGV del driver no se puede catchar, asi que pedir capas en la GPU
+     * sin estar verificado mataria la app.
      */
-    fun gpuLayers(backendName: String): Int =
-        if (wantsGpu(backendName)) GpuSupport.GPU_LAYERS_ALL else 0
+    fun gpuLayers(backendName: String, gpuAllowed: Boolean = GpuSupport.GGUF_GPU_EXPERIMENTAL): Int =
+        if (wantsGpu(backendName) && gpuAllowed) GpuSupport.GPU_LAYERS_ALL else 0
 
     /**
      * ¿El modelo realmente quedó corriendo en GPU?
      * Pedir GPU no basta: si el binario no trae el backend Vulkan, ggml se
-     * queda en CPU en silencio. Solo se afirma GPU si se pidió Y el build
-     * incluye Vulkan.
+     * queda en CPU en silencio. Solo se afirma GPU si se pidió, el build
+     * incluye Vulkan Y la via experimental esta habilitada.
      */
-    fun actuallyOnGpu(backendName: String, vulkanBuiltIn: Boolean): Boolean =
-        wantsGpu(backendName) && vulkanBuiltIn
+    fun actuallyOnGpu(
+        backendName: String,
+        vulkanBuiltIn: Boolean,
+        gpuAllowed: Boolean = GpuSupport.GGUF_GPU_EXPERIMENTAL,
+    ): Boolean = wantsGpu(backendName) && vulkanBuiltIn && gpuAllowed
 
     /**
      * ¿Hay que avisar al usuario de que pidió GPU pero obtuvo CPU?
-     * Solo cuando pidió GPU explícitamente y el build no trae Vulkan.
+     *
+     * Tres casos, todos con aviso:
+     *  - el build no trae Vulkan;
+     *  - la via experimental esta deshabilitada (el driver aun no es fiable);
+     *  - no se pidio GPU (entonces no hay nada que avisar).
      */
-    fun shouldWarnGpuFallback(backendName: String, vulkanBuiltIn: Boolean): Boolean =
-        wantsGpu(backendName) && !vulkanBuiltIn
+    fun shouldWarnGpuFallback(
+        backendName: String,
+        vulkanBuiltIn: Boolean,
+        gpuAllowed: Boolean = GpuSupport.GGUF_GPU_EXPERIMENTAL,
+    ): Boolean = wantsGpu(backendName) && (!vulkanBuiltIn || !gpuAllowed)
 
     /**
      * Nombre del modelo para registros/logs: el archivo sin la ruta.

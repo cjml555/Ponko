@@ -2555,7 +2555,16 @@ class MainActivity : Activity(), SettingsHost, ThemeAliases {
                             if (onGpu) getString(R.string.s_078_gpu) else getString(R.string.s_078),
                             C_OK
                         )
-                        if (gpuWanted && !onGpu) toast(getString(R.string.s_016))
+                        if (gpuWanted && !onGpu) {
+                        // El motivo importa: sin backend Vulkan en el binario
+                        // es otra cosa que la via experimental todavia
+                        // deshabilitada por el driver.
+                        toast(
+                            getString(
+                                if (GpuSupport.isVulkanBuiltIn()) R.string.s_560 else R.string.s_016
+                            )
+                        )
+                    }
                     }
                 } else {
                     // 后端：选 GPU 时先试 LiteRT 的 GPU 后端；设备/驱动不支持就自动退回 CPU
